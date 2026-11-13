@@ -3,14 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { approveFormat, listRuns, readMeta } from "./approve";
+import { approveFormat, cutFormat, listRuns, readMeta } from "./approve";
 import { cutFrameSize } from "./cut";
 
 const ID = "123e4567-e89b-42d3-a456-426614174000";
 const setup = async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "approve-"));
   await mkdir(path.join(root, "output", ID), { recursive: true });
-  const meta = { id: ID, name: "Goldeen AR", slug: "goldeen-ar", cells: [4], fileKey: "K", createdAt: "x", formats: { binder: { frameId: "1:2" } } };
+  const meta = { id: ID, name: "Goldeen AR", slug: "goldeen-ar", cells: [4], fileKey: "K", createdAt: "x", formats: { binder: { frameId: "1:2", cutFrameId: "5:6" } } };
   await writeFile(path.join(root, "output", ID, "run.json"), JSON.stringify(meta));
   return root;
 };
@@ -39,11 +39,55 @@ describe("approveFormat guards", () => {
   });
 });
 
+describe("cut then PDF", () => {
+  const noCut = async () => {
+    const root = await setup();
+    const p = path.join(root, "output", ID, "run.json");
+    const m = JSON.parse(await readFile(p, "utf8"));
+    m.formats.binder = { frameId: "1:2", approvedAt: "old" };
+    await writeFile(p, JSON.stringify(m));
+    return root;
+  };
+  it("409 without a cut and writes no PDF", async () => {
+    const root = await noCut();
+    const ex = async () => {
+      throw new Error("must not export");
+    };
+    expect(await approveFormat(root, ID, "binder", ex)).toEqual({ status: 409, error: "Cut to Figma first." });
+    expect(await readdir(path.join(root, "output", ID))).toEqual(["run.json"]);
+  });
+  it("cut saves cutFrameId and clears approvedAt, then PDF works", async () => {
+    const root = await noCut();
+    const r = await cutFormat(root, ID, "binder", async (k, fid, f, cells, name, old) => {
+      expect([k, fid, f, cells, name, old]).toEqual(["K", "1:2", "binder", [4], "goldeen-ar", undefined]);
+      return "7:8";
+    });
+    expect(r).toEqual({ status: 200, figmaUrl: "https://www.figma.com/design/K/?node-id=7-8" });
+    expect((await readMeta(root, ID))?.formats.binder).toEqual({ frameId: "1:2", cutFrameId: "7:8" });
+    expect((await approveFormat(root, ID, "binder", async () => png(cutFrameSize("binder").w, cutFrameSize("binder").h))).status).toBe(200);
+    expect((await listRuns(root))[0].formats).toEqual([{ format: "binder", cut: true, approved: true }]);
+  });
+  it("cut guards: 404s, 409 on overlap, 500 on cutter error", async () => {
+    const root = await setup();
+    const c = async () => "1:1";
+    const unknown = "123e4567-e89b-42d3-a456-426614174999";
+    for (const [id, f] of [["../x", "binder"], [unknown, "binder"], [ID, "nope"], [ID, "toploader"]])
+      expect((await cutFormat(root, id, f, c)).status).toBe(404);
+    let release!: (s: string) => void;
+    const first = cutFormat(root, ID, "binder", () => new Promise<string>((r) => (release = r)));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await cutFormat(root, ID, "binder", c)).toMatchObject({ status: 409 });
+    release("2:2");
+    expect((await first).status).toBe(200);
+    expect((await cutFormat(root, ID, "binder", async () => { throw new Error("boom"); })).status).toBe(500);
+  });
+});
+
 describe("approveFormat", () => {
   it("writes approved png, pdf and approvedAt", async () => {
     const root = await setup();
     const r = await approveFormat(root, ID, "binder", async (k, fid) => {
-      expect([k, fid]).toEqual(["K", "1:2"]);
+      expect([k, fid]).toEqual(["K", "5:6"]);
       return png(cutFrameSize("binder").w, cutFrameSize("binder").h);
     });
     expect(r).toEqual({ status: 200, pdf: `/api/runs/${ID}/pdf?format=binder` });
@@ -66,8 +110,8 @@ describe("listRuns", () => {
   it("shows approved only after approve, skipping unreadable runs", async () => {
     const root = await setup();
     await mkdir(path.join(root, "output", "junk"), { recursive: true });
-    expect(await listRuns(root)).toEqual([{ id: ID, name: "Goldeen AR", createdAt: "x", formats: [{ format: "binder", approved: false }] }]);
+    expect(await listRuns(root)).toEqual([{ id: ID, name: "Goldeen AR", createdAt: "x", formats: [{ format: "binder", cut: true, approved: false }] }]);
     await approveFormat(root, ID, "binder", async () => png(cutFrameSize("binder").w, cutFrameSize("binder").h));
-    expect((await listRuns(root))[0].formats).toEqual([{ format: "binder", approved: true }]);
+    expect((await listRuns(root))[0].formats).toEqual([{ format: "binder", cut: true, approved: true }]);
   });
 });
