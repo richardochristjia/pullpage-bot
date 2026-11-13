@@ -77,6 +77,7 @@ describe("pipeline", () => {
     const results = await runPipeline("r1", input, engines, () => {}, root);
     expect(calls).toEqual({ clean: 2, fill: 2, figma: 2, cleanFrame: 1 });
     expect(cleanFrameArgs[0]).toHaveLength(2);
+    for (const b of cleanFrameArgs[0]) expect(await sharp(b).metadata()).toMatchObject({ width: 750, height: 1050 });
     expect(results.map((r) => r.format)).toEqual(["binder", "toploader"]);
     const meta = JSON.parse(await readFile(path.join(root, "output", "r1", "run.json"), "utf8"));
     expect(meta).toMatchObject({
