@@ -27,18 +27,18 @@
 - [x] Add the Past runs list, refreshed on mount, after a run, and after approve
 
 ## Docs
-- [ ] Update the README Use/Output section for approve + PDF
+- [x] Update the README Use/Output section for approve + PDF
 
 ## Verification
-- [ ] Binder cells [4] gives 8 pieces at 0,1,2,3,5,6,7,8 of 750×1050, and cells [3,4,5] gives 6
-- [ ] Toploader gives 9 pieces of 900×1200, including card cells
-- [ ] Each piece is byte-equal to `sharp.extract` at its grid rect, with no resampling
-- [ ] PDF pages are row-major, binder 180×252 pt, toploader 216×288 pt, and embedded images decode byte-equal to the pieces
-- [ ] A wrong-size export fails with a clear error and writes no PDF
-- [ ] Approve gives 404 for a non-UUID id, missing run.json or bad format, a path like `../` never reaches the file system, and a concurrent approve gives 409
-- [ ] A successful run writes `run.json` with name, slug, cells, fileKey and frameId per format
-- [ ] `npm test`, `npm run lint` and `npm run build` pass
-- [ ] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, write those exact entries into `.agents/RECORD.md`; (2b) if it diverged, do not write a wrong entry, and surface the divergence in the final summary instead
+- [x] Binder cells [4] gives 8 pieces at 0,1,2,3,5,6,7,8 of 750×1050, and cells [3,4,5] gives 6
+- [x] Toploader gives 9 pieces of 900×1200, including card cells
+- [x] Each piece is byte-equal to `sharp.extract` at its grid rect, with no resampling
+- [x] PDF pages are row-major, binder 180×252 pt, toploader 216×288 pt, and embedded images decode byte-equal to the pieces
+- [x] A wrong-size export fails with a clear error and writes no PDF
+- [x] Approve gives 404 for a non-UUID id, missing run.json or bad format, a path like `../` never reaches the file system, and a concurrent approve gives 409
+- [x] A successful run writes `run.json` with name, slug, cells, fileKey and frameId per format
+- [x] `npm test`, `npm run lint` and `npm run build` pass
+- [x] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, write those exact entries into `.agents/RECORD.md`; (2b) if it diverged, do not write a wrong entry, and surface the divergence in the final summary instead
 
 ## Manual checks
 - [ ] manual: Run Goldeen binder, edit a layer in the Figma frame, press Approve. The PDF reflects the edit, has 8 pages, and the pages are 2.5×3.5 in in Preview.

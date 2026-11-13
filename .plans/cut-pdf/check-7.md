@@ -1,0 +1,1 @@
+- Plan holds for Docs/Verification: README Use section lacked approve/PDF (README.md); no code changes needed. Read cut.ts, approve.ts, pipeline.ts, and the cut/approve/pipeline tests.
