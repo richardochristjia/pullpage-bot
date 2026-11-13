@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { cardRect } from "../geometry";
 import { cutLayout } from "../cut";
-import { buildCutScript, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, publishToFigma } from "./figma";
+import { buildCleanFrameScript, buildCutScript, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, publishCleanFrame, publishToFigma } from "./figma";
 
 describe("figma", () => {
   it("script has size, page, rects, background before cards", () => {
@@ -117,5 +117,27 @@ describe("figma", () => {
     await expect(exportNode({ claude: async () => '{"exportUrl":"u"}', fetch: fakeFetch, fileKey: "K" }, "1:2", 20, 20)).rejects.toThrow(
       "figma: export is 10x10, expected 20x20",
     );
+  });
+
+  it("clean frame script names the frame and places count rects", () => {
+    const s = buildCleanFrameScript({ name: "g", count: 2 });
+    expect(s).toContain("clean_g");
+    expect(s).toContain('"Automation"');
+    expect(s).toContain("resize(1564, 1050)");
+    expect(s).toContain("i < 2");
+  });
+
+  it("publishCleanFrame uploads each PNG and rejects a wrong upload count", async () => {
+    const posted: string[] = [];
+    const fetchFake = (async (u: string) => {
+      posted.push(u);
+      return { json: async () => ({ success: true }) };
+    }) as unknown as typeof fetch;
+    const cleaned = [Buffer.from("a"), Buffer.from("b")];
+    const two = '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"u1"},{"nodeId":"1:4","submitUrl":"u2"}]}';
+    await expect(publishCleanFrame({ name: "g", cleaned, workDir: "" }, { claude: async () => two, fetch: fetchFake, fileKey: "K" })).resolves.toEqual({ frameId: "1:2" });
+    expect(posted).toEqual(["u1", "u2"]);
+    const one = '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"u1"}]}';
+    await expect(publishCleanFrame({ name: "g", cleaned, workDir: "" }, { claude: async () => one, fetch: fetchFake, fileKey: "K" })).rejects.toThrow("unexpected upload list");
   });
 });

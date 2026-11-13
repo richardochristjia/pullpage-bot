@@ -3,10 +3,10 @@
 - [x] Add parse cases to `src/lib/links.test.ts`
 
 ## Clean frame
-- [ ] Add `cleanFrame` to `Engines` in `src/lib/engines/types.ts`
-- [ ] Add `buildCleanFrameScript` and `publishCleanFrame` to `src/lib/engines/figma.ts`, with tests
-- [ ] Add the `clean figma` step and `cleanFrameId` meta to `runPipeline`; add optional `cleanFrameId` to `RunMeta`
-- [ ] Wire `cleanFrame` in `defaultEngines`; update `pipeline.test.ts` fakes and add the clean-frame tests
+- [x] Add `cleanFrame` to `Engines` in `src/lib/engines/types.ts`
+- [x] Add `buildCleanFrameScript` and `publishCleanFrame` to `src/lib/engines/figma.ts`, with tests
+- [x] Add the `clean figma` step and `cleanFrameId` meta to `runPipeline`; add optional `cleanFrameId` to `RunMeta`
+- [x] Wire `cleanFrame` in `defaultEngines`; update `pipeline.test.ts` fakes and add the clean-frame tests
 
 ## Link cut
 - [ ] Add `buildLinkCutScript` (format from size, cells from card layers, replace `cut_<name>` sibling, page-parent check)

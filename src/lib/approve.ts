@@ -9,6 +9,7 @@ export type RunMeta = {
   slug: string;
   cells: number[];
   fileKey?: string;
+  cleanFrameId?: string;
   createdAt: string;
   formats: Partial<Record<Format, { frameId: string; cutFrameId?: string; approvedAt?: string }>>;
 };

@@ -109,6 +109,8 @@ export async function runPipeline(
     results.push({ format, figmaUrl: r.url, pngPath: r.pngPath, frameId: r.frameId });
   }
 
+  const clean = await step("clean figma", () => engines.cleanFrame({ name, cleaned, workDir: work }));
+
   // Only a fully successful run writes to output/.
   await step("save", async () => {
     const dir = path.join(root, "output", id);
@@ -120,6 +122,7 @@ export async function runPipeline(
       slug: name,
       cells: input.cells,
       fileKey: input.fileKey,
+      cleanFrameId: clean.frameId,
       createdAt: new Date().toISOString(),
       formats: Object.fromEntries(results.map((r) => [r.format, { frameId: r.frameId }])),
     };
