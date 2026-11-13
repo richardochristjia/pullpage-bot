@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildPdf, cutPieces, pdfFileName } from "./cut";
 import { FORMATS, type Format } from "./geometry";
@@ -56,4 +56,20 @@ export async function approveFormat(root: string, id: string, format: string, ex
   } finally {
     locks.delete(key);
   }
+}
+
+export async function listRuns(root: string) {
+  const ids = await readdir(path.join(root, "output")).catch(() => [] as string[]);
+  const runs = [];
+  for (const id of ids) {
+    const meta = await readMeta(root, id);
+    if (!meta) continue;
+    const formats = [];
+    for (const format of Object.keys(meta.formats) as Format[]) {
+      const approved = await stat(path.join(root, "output", id, pdfFileName(meta.name, format))).then(() => true, () => false);
+      formats.push({ format, approved });
+    }
+    runs.push({ id, name: meta.name, createdAt: meta.createdAt, formats });
+  }
+  return runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

@@ -18,9 +18,9 @@
 - [x] Create `src/lib/approve.test.ts` covering test cases 10–11
 
 ## Disk-backed reads
-- [ ] Add `listRuns(root)` and `GET /api/runs`, with a test that an approved run shows approved (moved from case 11)
-- [ ] Gate `src/app/api/runs/[id]/image/route.ts` on `isRunId` + `run.json` instead of `getRun`
-- [ ] Create `src/app/api/runs/[id]/pdf/route.ts` (attachment, UTF-8 filename)
+- [x] Add `listRuns(root)` and `GET /api/runs`, with a test that an approved run shows approved (moved from case 11)
+- [x] Gate `src/app/api/runs/[id]/image/route.ts` on `isRunId` + `run.json` instead of `getRun`
+- [x] Create `src/app/api/runs/[id]/pdf/route.ts` (attachment, UTF-8 filename)
 
 ## UI
 - [ ] Add the `Approve` control (idle/busy/error/done, Download PDF, Re-approve) under each result in `src/app/page.tsx`

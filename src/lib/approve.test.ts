@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { approveFormat, readMeta } from "./approve";
+import { approveFormat, listRuns, readMeta } from "./approve";
 import { CANVAS } from "./geometry";
 
 const ID = "123e4567-e89b-42d3-a456-426614174000";
@@ -59,5 +59,15 @@ describe("approveFormat", () => {
     expect(r.status).toBe(500);
     expect(await readdir(path.join(root, "output", ID))).toEqual(["run.json"]);
     expect(JSON.parse(await readFile(path.join(root, "output", ID, "run.json"), "utf8")).formats.binder.approvedAt).toBeUndefined();
+  });
+});
+
+describe("listRuns", () => {
+  it("shows approved only after approve, skipping unreadable runs", async () => {
+    const root = await setup();
+    await mkdir(path.join(root, "output", "junk"), { recursive: true });
+    expect(await listRuns(root)).toEqual([{ id: ID, name: "Goldeen AR", createdAt: "x", formats: [{ format: "binder", approved: false }] }]);
+    await approveFormat(root, ID, "binder", async () => png(CANVAS.binder.w, CANVAS.binder.h));
+    expect((await listRuns(root))[0].formats).toEqual([{ format: "binder", approved: true }]);
   });
 });
