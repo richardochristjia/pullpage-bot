@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { cutFrameSize, cutLayout } from "../cut";
 import { CANVAS, cardRect, type Format } from "../geometry";
 import { jpegUnder } from "../imaging";
 import type { FigmaInput } from "./types";
@@ -84,19 +85,57 @@ async function askJson(deps: FigmaDeps, prompt: string, tries: number) {
   }
 }
 
-export async function exportFrame(deps: FigmaDeps, frameId: string, format: Format): Promise<Buffer> {
+export async function exportNode(deps: FigmaDeps, nodeId: string, w: number, h: number): Promise<Buffer> {
   const exp = await askJson(
     deps,
-    `Use the Figma MCP tools. Call download_assets with fileKey "${deps.fileKey}" and nodeId "${frameId}". Reply with ONLY JSON: {"exportUrl":"..."}`,
+    `Use the Figma MCP tools. Call download_assets with fileKey "${deps.fileKey}" and nodeId "${nodeId}". Reply with ONLY JSON: {"exportUrl":"..."}`,
     2,
   );
   const res = await deps.fetch(exp.exportUrl);
   if (!res.ok) throw new Error(`figma: export download failed: ${res.status}`);
   const png = Buffer.from(await res.arrayBuffer());
   const m = await sharp(png).metadata();
-  const { w, h } = CANVAS[format];
   if (m.width !== w || m.height !== h) throw new Error(`figma: export is ${m.width}x${m.height}, expected ${w}x${h}`);
   return png;
+}
+
+export const exportFrame = (deps: FigmaDeps, frameId: string, format: Format) =>
+  exportNode(deps, frameId, CANVAS[format].w, CANVAS[format].h);
+
+export function buildCutScript(o: { frameId: string; oldCutFrameId?: string; name: string; format: Format; pieces: ReturnType<typeof cutLayout>; size: { w: number; h: number } }) {
+  const pieces = o.pieces.map((p) => ({ cell: p.cell, sx: p.src.x, sy: p.src.y, dx: p.dst.x, dy: p.dst.y, w: p.w, h: p.h }));
+  return `const src = await figma.getNodeByIdAsync(${JSON.stringify(o.frameId)});
+if (!src) throw new Error("frame not found");
+let pg = src; while (pg.type !== "PAGE") pg = pg.parent;
+await figma.setCurrentPageAsync(pg);
+${o.oldCutFrameId ? `const old = await figma.getNodeByIdAsync(${JSON.stringify(o.oldCutFrameId)});
+if (old) old.remove();` : ""}
+const cut = figma.createFrame();
+cut.name = ${JSON.stringify(`cut_${o.name}_${o.format}`)};
+cut.resize(${o.size.w}, ${o.size.h});
+cut.x = src.x + src.width + 200; cut.y = src.y;
+cut.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
+cut.clipsContent = true;
+for (const q of ${JSON.stringify(pieces)}) {
+  const p = figma.createFrame(); p.name = "piece " + (q.cell + 1);
+  p.resize(q.w, q.h); p.clipsContent = true; p.fills = [];
+  cut.appendChild(p); p.x = q.dx; p.y = q.dy;
+  const c = src.clone(); p.appendChild(c);
+  c.x = -q.sx; c.y = -q.sy;
+  for (const n of [...c.children]) if (/^card\\d+$/.test(n.name)) n.remove();
+}
+return { cutFrameId: cut.id };`;
+}
+
+export async function cutToFigma(deps: FigmaDeps, frameId: string, format: Format, cardCells: number[], name: string, oldCutFrameId?: string): Promise<string> {
+  const script = buildCutScript({ frameId, oldCutFrameId, name, format, pieces: cutLayout(format, cardCells), size: cutFrameSize(format) });
+  const reply = await askJson(
+    deps,
+    `Use the Figma MCP tools. 1) Call create_session with fileKey "${deps.fileKey}". 2) Call use_figma with fileKey "${deps.fileKey}" and this code verbatim:\n${script}\nReply with ONLY JSON: {"cutFrameId":"..."}`,
+    1,
+  );
+  if (!reply.cutFrameId) throw new Error("figma: no cutFrameId");
+  return String(reply.cutFrameId);
 }
 
 export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {

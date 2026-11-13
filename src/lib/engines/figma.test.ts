@@ -4,7 +4,8 @@ import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { cardRect } from "../geometry";
-import { buildFrameScript, exportFrame, extractJson, publishToFigma } from "./figma";
+import { cutLayout } from "../cut";
+import { buildCutScript, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, publishToFigma } from "./figma";
 
 describe("figma", () => {
   it("script has size, page, rects, background before cards", () => {
@@ -85,6 +86,36 @@ describe("figma", () => {
     const fakeFetch = (async () => ({ ok: true, arrayBuffer: async () => wrong.buffer.slice(wrong.byteOffset, wrong.byteOffset + wrong.length) })) as any;
     await expect(exportFrame({ claude: async () => '{"exportUrl":"u"}', fetch: fakeFetch, fileKey: "K" }, "1:2", "binder")).rejects.toThrow(
       "figma: export is 2251x3152, expected 2252x3152",
+    );
+  });
+
+  it("buildCutScript drops only card layers, offsets clones, one piece per entry", () => {
+    const pieces = cutLayout("binder", [4]);
+    const base = { frameId: "1:2", name: "g", format: "binder" as const, pieces, size: { w: 2578, h: 3478 } };
+    const js = buildCutScript({ ...base, oldCutFrameId: "9:9" });
+    expect(js).toContain("/^card\\d+$/");
+    expect(js).toContain('getNodeByIdAsync("9:9")');
+    for (const p of pieces) expect(js).toContain(`"cell":${p.cell},"sx":${p.src.x},"sy":${p.src.y},"dx":${p.dst.x},"dy":${p.dst.y}`);
+    expect(js.match(/"cell":/g)).toHaveLength(8);
+    expect(js).toContain("c.x = -q.sx; c.y = -q.sy;");
+    expect(buildCutScript(base)).not.toContain("old");
+  });
+
+  it("cutToFigma returns the id and does not retry garbage", async () => {
+    const prompts: string[] = [];
+    const mk = (r: string) => ({ claude: async (p: string) => (prompts.push(p), r), fetch: fetch, fileKey: "K" });
+    expect(await cutToFigma(mk('{"cutFrameId":"5:6"}'), "1:2", "binder", [4], "g")).toBe("5:6");
+    prompts.length = 0;
+    await expect(cutToFigma(mk("garbage"), "1:2", "binder", [4], "g")).rejects.toThrow();
+    expect(prompts).toHaveLength(1);
+    await expect(cutToFigma(mk("{}"), "1:2", "binder", [4], "g")).rejects.toThrow("figma: no cutFrameId");
+  });
+
+  it("exportNode rejects a wrong-size export", async () => {
+    const wrong = await png(10, 10);
+    const fakeFetch = (async () => ({ ok: true, arrayBuffer: async () => wrong.buffer.slice(wrong.byteOffset, wrong.byteOffset + wrong.length) })) as any;
+    await expect(exportNode({ claude: async () => '{"exportUrl":"u"}', fetch: fakeFetch, fileKey: "K" }, "1:2", 20, 20)).rejects.toThrow(
+      "figma: export is 10x10, expected 20x20",
     );
   });
 });

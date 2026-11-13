@@ -4,10 +4,10 @@
 - [x] Update `src/lib/cut.test.ts` (spec cases 1–6)
 
 ## Figma cut
-- [ ] Add `buildCutScript` (clone per piece, drop `/^card\d+$/`, offset, old-cut removal)
-- [ ] Add `cutToFigma` (one try, returns cutFrameId)
-- [ ] Generalise export to `exportNode(deps, nodeId, w, h)`; keep `exportFrame` as wrapper
-- [ ] Tests in `src/lib/engines/figma.test.ts` (spec cases 7–9)
+- [x] Add `buildCutScript` (clone per piece, drop `/^card\d+$/`, offset, old-cut removal)
+- [x] Add `cutToFigma` (one try, returns cutFrameId)
+- [x] Generalise export to `exportNode(deps, nodeId, w, h)`; keep `exportFrame` as wrapper
+- [x] Tests in `src/lib/engines/figma.test.ts` (spec cases 7–9)
 
 ## Cut route
 - [ ] Add `cutFormat` to `src/lib/approve.ts` (guards, shared lock, save cutFrameId, clear approvedAt)
