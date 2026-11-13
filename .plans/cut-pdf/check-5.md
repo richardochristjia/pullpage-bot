@@ -1,0 +1,1 @@
+- Plan holds: read approve.ts, runs/route.ts, image route, plan.md Phase 5. listRuns goes in src/lib/approve.ts beside readMeta (reuses it, no new module); the image route's `_${format}.png` match never hits `.approved.png`, so it is unaffected.

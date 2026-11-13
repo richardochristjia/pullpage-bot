@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { listRuns } from "@/lib/approve";
 import { validateRun, type RunInput } from "@/lib/pipeline";
 import { defaultEngines, isBusy, startRun } from "@/lib/runs";
 
 export const runtime = "nodejs";
+
+export async function GET() {
+  return NextResponse.json(await listRuns(process.cwd()));
+}
 
 export async function POST(req: Request) {
   const form = await req.formData();
