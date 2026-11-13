@@ -15,10 +15,12 @@ Local web app that extends 1 to 3 Pokemon cards into a finished binder-sleeve or
 
 Output: `output/<runId>/output_<name>_<format>.png` and a frame `output_<name>_<format>` on the `Automation` page of the Figma file.
 
+After a run, check the frame in Figma and edit it if needed, then press **Approve & make PDF**. The server re-exports the frame, cuts it into pieces on the fixed grid (no AI step) and writes `output/<runId>/<Name> <format>.pdf`, one 300 dpi page per piece in row-major order. Binder pieces are 2.5x3.5 in with card cells skipped; toploader pieces are 3x4 in, all 9. Past runs, including ones from before a restart, are listed on the page and can be approved there.
+
 ## Run time and limits
 
 - About 6 to 10 minutes per card set; each `agy` call takes 2 to 4 minutes. A run needs one call per card plus one per format.
-- One run at a time; run state is kept in memory and lost on restart.
+- One run at a time; run progress is kept in memory and lost on restart, but each finished run keeps a `run.json` in its output folder.
 - `agy` returns 896x1200 images, so the background is upscaled and is softer than the cards, which are placed at native size.
 - Works only on a Mac with `agy`, Claude Code and Figma logged in.
 
