@@ -11,7 +11,7 @@ export type FigmaInput = {
 export interface Engines {
   clean(inPng: string, outPath: string): Promise<void>;
   fill(inPng: string, outPath: string): Promise<void>;
-  figma(input: FigmaInput): Promise<{ url: string; pngPath: string }>;
+  figma(input: FigmaInput): Promise<{ url: string; pngPath: string; frameId: string }>;
 }
 
 export const CLEAN_PROMPT =

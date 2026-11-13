@@ -9,6 +9,7 @@ export type RunInput = {
   cells: number[];
   formats: Format[];
   name?: string;
+  fileKey?: string;
 };
 export type StepStatus = "pending" | "running" | "done" | "failed";
 export type OnStep = (label: string, status: StepStatus, error?: string) => void;
@@ -20,6 +21,14 @@ export const slugify = (s: string) =>
   s.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 
 export const runName = (i: RunInput) => slugify(i.name || i.cards[0]?.name || "");
+
+export const displayName = (i: RunInput) =>
+  (i.name || i.cards[0]?.name || "")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80) || runName(i);
 
 export function validateRun(i: RunInput, fileKey = process.env.FIGMA_FILE_KEY): string[] {
   const e: string[] = [];
@@ -76,7 +85,7 @@ export async function runPipeline(
     );
   }
 
-  const results: { format: Format; figmaUrl: string; pngPath: string }[] = [];
+  const results: { format: Format; figmaUrl: string; pngPath: string; frameId: string }[] = [];
   for (const format of input.formats) {
     const canvas = await step(`${format} canvas`, () =>
       composeCanvas(format, cleaned.map((png, k) => ({ cell: input.cells[k], png }))),
@@ -97,7 +106,7 @@ export async function runPipeline(
         workDir: work,
       }),
     );
-    results.push({ format, figmaUrl: r.url, pngPath: r.pngPath });
+    results.push({ format, figmaUrl: r.url, pngPath: r.pngPath, frameId: r.frameId });
   }
 
   // Only a fully successful run writes to output/.
@@ -105,6 +114,16 @@ export async function runPipeline(
     const dir = path.join(root, "output", id);
     await mkdir(dir, { recursive: true });
     for (const r of results) await cp(r.pngPath, path.join(dir, `output_${name}_${r.format}.png`));
+    const meta = {
+      id,
+      name: displayName(input),
+      slug: name,
+      cells: input.cells,
+      fileKey: input.fileKey,
+      createdAt: new Date().toISOString(),
+      formats: Object.fromEntries(results.map((r) => [r.format, { frameId: r.frameId }])),
+    };
+    await writeFile(path.join(dir, "run.json"), JSON.stringify(meta, null, 2));
   });
   return results.map((r) => ({ format: r.format, figmaUrl: r.figmaUrl }));
 }

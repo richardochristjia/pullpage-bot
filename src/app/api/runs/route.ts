@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runName, validateRun, type RunInput } from "@/lib/pipeline";
+import { validateRun, type RunInput } from "@/lib/pipeline";
 import { defaultEngines, isBusy, startRun } from "@/lib/runs";
 
 export const runtime = "nodejs";
@@ -19,6 +19,7 @@ export async function POST(req: Request) {
       cells: JSON.parse(String(form.get("cells") ?? "[]")),
       formats: JSON.parse(String(form.get("formats") ?? "[]")),
       name: String(form.get("name") ?? ""),
+      fileKey: process.env.FIGMA_FILE_KEY,
     };
   } catch {
     return NextResponse.json({ errors: ["Bad request."] }, { status: 400 });
@@ -26,6 +27,6 @@ export async function POST(req: Request) {
   const errors = validateRun(input);
   if (errors.length) return NextResponse.json({ errors }, { status: 400 });
   if (isBusy()) return NextResponse.json({ errors: ["A run is already active."] }, { status: 409 });
-  const id = startRun({ ...input, name: runName(input) }, defaultEngines(process.env.FIGMA_FILE_KEY!));
+  const id = startRun(input, defaultEngines(process.env.FIGMA_FILE_KEY!));
   return NextResponse.json({ id }, { status: 202 });
 }
