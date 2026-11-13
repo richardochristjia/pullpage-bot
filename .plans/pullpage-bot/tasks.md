@@ -21,7 +21,7 @@
 - [x] Build `src/app/page.tsx`: drop zone (max 3), per-card cell picker, format toggles, name, Run, progress polling, result preview, download, Figma link, error view
 
 ## README
-- [ ] Write `README.md` (setup: npm i, agy login, Claude Code + Figma plugin, FIGMA_FILE_KEY; usage; run time; limits)
+- [x] Write `README.md` (setup: npm i, agy login, Claude Code + Figma plugin, FIGMA_FILE_KEY; usage; run time; limits)
 
 ## Verification
 - [ ] AC1: binder cells at 751/1051 steps; toploader card 75px inset, centre (976,1276)
