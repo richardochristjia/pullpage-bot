@@ -12,13 +12,13 @@
 - [x] Create `src/lib/cut.test.ts` covering test cases 1–9 and 13
 
 ## Approve route
-- [ ] Create `src/lib/approve.ts` with `isRunId`, `readMeta`, per run+format lock, `approveFormat` (temp file + rename, `approvedAt`)
-- [ ] Add `defaultFigmaDeps(fileKey)` to `src/lib/runs.ts` and reuse it in `defaultEngines`
-- [ ] Create `src/app/api/runs/[id]/approve/route.ts` (POST ?format=)
-- [ ] Create `src/lib/approve.test.ts` covering test cases 10–11
+- [x] Create `src/lib/approve.ts` with `isRunId`, `readMeta`, per run+format lock, `approveFormat` (temp file + rename, `approvedAt`)
+- [x] Add `defaultFigmaDeps(fileKey)` to `src/lib/runs.ts` and reuse it in `defaultEngines`
+- [x] Create `src/app/api/runs/[id]/approve/route.ts` (POST ?format=)
+- [x] Create `src/lib/approve.test.ts` covering test cases 10–11
 
 ## Disk-backed reads
-- [ ] Add `listRuns(root)` and `GET /api/runs`
+- [ ] Add `listRuns(root)` and `GET /api/runs`, with a test that an approved run shows approved (moved from case 11)
 - [ ] Gate `src/app/api/runs/[id]/image/route.ts` on `isRunId` + `run.json` instead of `getRun`
 - [ ] Create `src/app/api/runs/[id]/pdf/route.ts` (attachment, UTF-8 filename)
 
