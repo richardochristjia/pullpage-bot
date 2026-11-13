@@ -73,13 +73,13 @@ export function runClaude(prompt: string, timeoutMs = 180_000, spawn: typeof nod
 
 export type FigmaDeps = { claude: (prompt: string) => Promise<string>; fetch: typeof fetch; fileKey: string };
 
-// One retry when the reply has no parseable JSON.
-async function askJson(deps: FigmaDeps, prompt: string) {
-  for (let i = 0; ; i++) {
+// Retry only idempotent prompts: re-running the frame-creating one leaves a duplicate frame.
+async function askJson(deps: FigmaDeps, prompt: string, tries: number) {
+  for (let i = 1; ; i++) {
     try {
       return extractJson(await deps.claude(prompt));
     } catch (e) {
-      if (i === 1) throw e;
+      if (i >= tries) throw e;
     }
   }
 }
@@ -94,6 +94,7 @@ export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
   const reply = await askJson(
     deps,
     `Use the Figma MCP tools. 1) Call create_session with fileKey "${fileKey}". 2) Call use_figma with fileKey "${fileKey}" and this code verbatim:\n${script}\n3) Call upload_assets with fileKey "${fileKey}", count ${1 + input.originals.length}, nodeIds = [bgId, ...cardIds] from the result, and currentPageId = pageId from the result. Reply with ONLY JSON: {"pageId":"...","frameId":"...","uploads":[{"nodeId":"...","submitUrl":"..."}]} in the same order as nodeIds.`,
+    1,
   );
   const uploads: { nodeId: string; submitUrl: string }[] = reply.uploads;
   if (!Array.isArray(uploads) || uploads.length !== 1 + input.originals.length || !reply.frameId) {
@@ -118,6 +119,7 @@ export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
   const exp = await askJson(
     deps,
     `Use the Figma MCP tools. Call download_assets with fileKey "${fileKey}" and nodeId "${reply.frameId}". Reply with ONLY JSON: {"exportUrl":"..."}`,
+    2,
   );
   const res = await deps.fetch(exp.exportUrl);
   if (!res.ok) throw new Error(`figma: export download failed: ${res.status}`);

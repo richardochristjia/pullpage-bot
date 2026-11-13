@@ -25,18 +25,24 @@ describe("figma", () => {
 
   const png = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: "white" } }).png().toBuffer();
 
-  it("throws on duplicate node IDs and retries unparseable replies once", async () => {
+  it("throws on duplicate node IDs", async () => {
     const workDir = await mkdtemp(path.join(os.tmpdir(), "fg-"));
     const input = { format: "binder" as const, name: "g", bg: await png(2252, 3152), originals: [{ cell: 4, label: "a", png: await png(750, 1050) }], workDir };
-    let calls = 0;
-    const claude = async () => {
-      calls++;
-      return calls === 1
-        ? "garbage"
-        : '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"u"},{"nodeId":"1:3","submitUrl":"u"}]}';
-    };
+    const claude = async () => '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"u"},{"nodeId":"1:3","submitUrl":"u"}]}';
     await expect(publishToFigma(input, { claude, fetch: fetch, fileKey: "K" })).rejects.toThrow("node IDs mismatch");
-    expect(calls).toBe(2);
+  });
+
+  it("never re-sends the frame-creating prompt after a failure", async () => {
+    const workDir = await mkdtemp(path.join(os.tmpdir(), "fg-"));
+    const input = { format: "binder" as const, name: "g", bg: await png(2252, 3152), originals: [{ cell: 4, label: "a", png: await png(750, 1050) }], workDir };
+    const prompts: string[] = [];
+    const claude = async (p: string) => {
+      prompts.push(p);
+      if (prompts.length === 1) throw new Error("claude timed out");
+      return '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"u"},{"nodeId":"1:4","submitUrl":"u"}]}';
+    };
+    await expect(publishToFigma(input, { claude, fetch: fetch, fileKey: "K" })).rejects.toThrow("claude timed out");
+    expect(prompts.filter((p) => p.includes("use_figma")).length).toBe(1);
   });
 
   it("happy path posts uploads and downloads the export", async () => {
@@ -44,6 +50,7 @@ describe("figma", () => {
     const input = { format: "binder" as const, name: "g", bg: await png(2252, 3152), originals: [{ cell: 4, label: "a", png: await png(750, 1050) }], workDir };
     const replies = [
       '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"http://up/1"},{"nodeId":"1:4","submitUrl":"http://up/2"}]}',
+      "garbage", // download_assets is idempotent, so one unparseable reply is retried
       '{"exportUrl":"http://exp"}',
     ];
     const posted: string[] = [];
