@@ -68,6 +68,72 @@ function CutAndPdf({ id, format, cut, approved, onDone }: { id: string; format: 
   );
 }
 
+type LineStatus = { url: string; text: string; ok: boolean; pdf?: string };
+const toLines = (t: string) => [...new Set(t.split("\n").map((s) => s.trim()).filter(Boolean))];
+
+function LinkTools() {
+  const [cutText, setCutText] = useState("");
+  const [exportText, setExportText] = useState("");
+  const [cutStatus, setCutStatus] = useState<LineStatus[]>([]);
+  const [exportStatus, setExportStatus] = useState<LineStatus[]>([]);
+  const [busy, setBusy] = useState<"" | "cut" | "export">("");
+
+  async function runAll(kind: "cut" | "export") {
+    const set = kind === "cut" ? setCutStatus : setExportStatus;
+    setBusy(kind);
+    set([]);
+    for (const url of toLines(kind === "cut" ? cutText : exportText)) {
+      let st: LineStatus;
+      try {
+        const res = await fetch(`/api/links/${kind}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error ?? "Request failed.");
+        if (kind === "cut") {
+          st = { url, text: `done · ${body.format}`, ok: true };
+          setExportText((prev) =>
+            toLines(prev).includes(body.cutUrl) ? prev : (prev.trim() ? prev.trimEnd() + "\n" : "") + body.cutUrl,
+          );
+        } else st = { url, text: `done · ${body.format} · ${body.pages} pages`, ok: true, pdf: body.pdf };
+      } catch (e) {
+        st = { url, text: e instanceof Error ? e.message : String(e), ok: false };
+      }
+      set((p) => [...p, st]);
+    }
+    setBusy("");
+  }
+
+  const list = (rows: LineStatus[]) =>
+    rows.length > 0 && (
+      <ul>
+        {rows.map((r) => (
+          <li key={r.url} style={{ color: r.ok ? undefined : "#f66" }}>
+            {r.url.slice(-40)}: {r.text}{" "}
+            {r.pdf && <a href={r.pdf} download>Download PDF</a>}
+          </li>
+        ))}
+      </ul>
+    );
+
+  return (
+    <section>
+      <h2>Links</h2>
+      <h3>Frames to cut</h3>
+      <textarea rows={4} style={{ width: "100%" }} placeholder="One Figma frame link per line" value={cutText} onChange={(e) => setCutText(e.target.value)} />
+      <button disabled={!!busy || !toLines(cutText).length} onClick={() => runAll("cut")}>
+        {busy === "cut" ? "Cutting…, about 30s each" : "Cut"}
+      </button>
+      {list(cutStatus)}
+      <h3>Cut frames to export</h3>
+      <textarea rows={4} style={{ width: "100%" }} placeholder="One cut frame link per line" value={exportText} onChange={(e) => setExportText(e.target.value)} />
+      <button disabled={!!busy || !toLines(exportText).length} onClick={() => runAll("export")}>
+        {busy === "export" ? "Exporting…, about 30s each" : "Export"}
+      </button>
+      <small style={{ display: "block", opacity: 0.7 }}>Check the cut frames in Figma first. Export runs only when you click.</small>
+      {list(exportStatus)}
+    </section>
+  );
+}
+
 export default function Page() {
   const [cards, setCards] = useState<Card[]>([]);
   const [formats, setFormats] = useState<Format[]>(["binder"]);
@@ -237,6 +303,7 @@ export default function Page() {
           ))}
         </section>
       )}
+      <LinkTools />
     </main>
   );
 }

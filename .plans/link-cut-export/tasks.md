@@ -23,10 +23,10 @@
 - [x] Add `POST /api/links/cut`, `POST /api/links/export`, `GET /api/links/pdf` (400/409/500 mapping, parse before lock)
 
 ## UI
-- [ ] Add the `LinkTools` section to `page.tsx`: two textareas, serial loops, per-line status, cut appends to the export box, Export only on click
+- [x] Add the `LinkTools` section to `page.tsx`: two textareas, serial loops, per-line status, cut appends to the export box, Export only on click
 
 ## Docs
-- [ ] Update `README.md` with the clean frame and the Links section, including the card-layer naming caveat
+- [x] Update `README.md` with the clean frame and the Links section, including the card-layer naming caveat
 
 ## Verification
 - [ ] `parseFrameLink` accepts a valid link to the configured file and rejects a foreign file key, a missing node ID and a non-Figma host
