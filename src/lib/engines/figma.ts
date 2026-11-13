@@ -204,6 +204,20 @@ export async function cutLinkInFigma(deps: FigmaDeps, nodeId: string) {
   return { cutFrameId: String(reply.cutFrameId), format: reply.format as Format, cardCells: (reply.cardCells ?? []) as number[] };
 }
 
+export const buildReadCutScript = (o: { nodeId: string }) => `const n = await figma.getNodeByIdAsync(${JSON.stringify(o.nodeId)});
+if (!n) throw new Error("frame not found");
+return { w: Math.round(n.width), h: Math.round(n.height), name: n.name, cells: (n.children ?? []).filter((c) => /^piece \\d+$/.test(c.name)).map((c) => Number(c.name.slice(6)) - 1) };`;
+
+export async function readCutFrame(deps: FigmaDeps, nodeId: string) {
+  const r = await askJson(
+    deps,
+    `Use the Figma MCP tools. 1) Call create_session with fileKey "${deps.fileKey}". 2) Call use_figma with fileKey "${deps.fileKey}" and this code verbatim:\n${buildReadCutScript({ nodeId })}\nReply with ONLY JSON: {"w":...,"h":...,"name":"...","cells":[...]}`,
+    2,
+  );
+  if (!Number.isFinite(r.w) || !Number.isFinite(r.h) || typeof r.name !== "string" || !Array.isArray(r.cells)) throw new Error("figma: unexpected read reply");
+  return r as { w: number; h: number; name: string; cells: number[] };
+}
+
 export async function cutToFigma(deps: FigmaDeps, frameId: string, format: Format, cardCells: number[], name: string, oldCutFrameId?: string): Promise<string> {
   const script = buildCutScript({ frameId, oldCutFrameId, name, format, pieces: cutLayout(format, cardCells), size: cutFrameSize(format) });
   const reply = await askJson(
