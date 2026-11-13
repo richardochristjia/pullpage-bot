@@ -1,0 +1,4 @@
+- The link cut script was only run against a minimal fake `figma` object (src/lib/engines/figma.test.ts); real Plugin API behaviour (clone of a frame with children, `fills = []`, auto-append of createFrame to the current page) is unchecked. Check: cut one binder and one toploader link in the real file.
+- Haiku may rewrite or truncate the verbatim script, or return `cardCells`/`name` in another shape (src/lib/engines/figma.ts `cutLinkInFigma`, `readCutFrame`). Check: run Cut and Export on real links.
+- `use_figma` result shape for `figma.getNodeByIdAsync` on frames in an unloaded page is untested (dynamic page loading). Check: cut a frame on a page that was not open.
+- A card layer slightly off the grid (>2px) is not detected as a card cell (links cut script); binder then keeps 9 pieces. Check: cut a frame with a nudged card.
