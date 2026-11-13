@@ -11,41 +11,58 @@ type RunView = {
 };
 type Card = { file: File; url: string; cell: number };
 
-type PastRun = { id: string; name: string; createdAt: string; formats: { format: Format; approved: boolean }[] };
+type PastRun = { id: string; name: string; createdAt: string; formats: { format: Format; cut: boolean; approved: boolean }[] };
 
 const DEFAULT_CELLS = [4, 5, 3];
 
-function Approve({ id, format, approved, onDone }: { id: string; format: Format; approved: boolean; onDone: () => void }) {
-  const [state, setState] = useState<"idle" | "busy" | "error" | "done">("idle");
-  const [message, setMessage] = useState("");
-  const isDone = approved || state === "done";
+function CutAndPdf({ id, format, cut, approved, onDone }: { id: string; format: Format; cut: boolean; approved: boolean; onDone: () => void }) {
+  const [busy, setBusy] = useState<"" | "cut" | "pdf">("");
+  const [isCut, setIsCut] = useState(cut);
+  const [isPdf, setIsPdf] = useState(approved);
+  const [figmaUrl, setFigmaUrl] = useState("");
+  const [error, setError] = useState("");
 
-  async function approve() {
-    setState("busy");
+  async function post(step: "cut" | "approve") {
+    setBusy(step === "cut" ? "cut" : "pdf");
+    setError("");
     try {
-      const res = await fetch(`/api/runs/${id}/approve?format=${format}`, { method: "POST" });
+      const res = await fetch(`/api/runs/${id}/${step}?format=${format}`, { method: "POST" });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? "Approve failed.");
-      setState("done");
+      if (!res.ok) throw new Error(body.error ?? "Request failed.");
+      if (step === "cut") {
+        setIsCut(true);
+        setFigmaUrl(body.figmaUrl ?? "");
+      } else setIsPdf(true);
       onDone();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e));
-      setState("error");
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy("");
     }
   }
 
   return (
     <span>
-      <button disabled={state === "busy"} onClick={approve}>
-        {state === "busy" ? "Cutting…, about 30s" : isDone ? "Re-approve" : "Approve"}
+      <button disabled={!!busy} onClick={() => post("cut")}>
+        {busy === "cut" ? "Cutting…, about 30s" : isCut ? "Re-cut" : "Cut to Figma"}
       </button>
-      {isDone && (
+      {figmaUrl && (
+        <>
+          {" "}
+          <a href={figmaUrl} target="_blank" rel="noreferrer">Open cut in Figma</a>
+        </>
+      )}{" "}
+      <button disabled={!!busy || !isCut} onClick={() => post("approve")}>
+        {busy === "pdf" ? "Making PDF…, about 30s" : isPdf ? "Re-make PDF" : "Make PDF"}
+      </button>
+      {isPdf && (
         <>
           {" "}
           <a href={`/api/runs/${id}/pdf?format=${format}`} download>Download PDF</a>
         </>
       )}
-      {state === "error" && <span style={{ color: "#f66" }}> {message}</span>}
+      <small style={{ display: "block", opacity: 0.7 }}>Check the pieces in Figma. Edit inside them, don&apos;t move them.</small>
+      {error && <span style={{ color: "#f66" }}> {error}</span>}
     </span>
   );
 }
@@ -192,7 +209,7 @@ export default function Page() {
             <p>
               <a href={`/api/runs/${run.id}/image?format=${r.format}`} download>Download</a>{" · "}
               <a href={r.figmaUrl} target="_blank" rel="noreferrer">Open in Figma</a>{" · "}
-              <Approve id={run.id} format={r.format} approved={false} onDone={loadPast} />
+              <CutAndPdf id={run.id} format={r.format} cut={false} approved={false} onDone={loadPast} />
             </p>
           </div>
         ))}
@@ -211,7 +228,7 @@ export default function Page() {
                       <img src={`/api/runs/${p.id}/image?format=${f.format}`} alt={f.format} width={100} />
                     </a>
                     <div>{f.format}</div>
-                    <Approve id={p.id} format={f.format} approved={f.approved} onDone={loadPast} />
+                    <CutAndPdf id={p.id} format={f.format} cut={f.cut} approved={f.approved} onDone={loadPast} />
                   </div>
                 ))}
               </div>
