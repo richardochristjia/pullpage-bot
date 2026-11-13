@@ -308,3 +308,9 @@ Manual:
 - (background) Background generation is handled by the Antigravity CLI on the user's Google AI subscription, and the result is upscaled to the canvas size.
 - (figma) Frame assembly and export are handled by a headless Claude agent on Figma MCP, which writes to the `Automation` page of the configured Figma file.
 - (output) Finished frames are persisted as PNG files to `pullpage-bot/output/`.
+
+## Divergences
+
+- Figma call 1 is not retried (plan said one retry on parse failure for both calls); a retry re-ran the frame-creating script and left a duplicate frame. Call 2 keeps its retry. (falsify C2)
+- `toCard` also applies EXIF orientation (`.rotate()`) before resizing; not in the plan. (falsify C3)
+- `runAgy` drains agy stdout; not in the plan. (falsify C1)
