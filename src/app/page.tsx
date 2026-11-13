@@ -11,7 +11,44 @@ type RunView = {
 };
 type Card = { file: File; url: string; cell: number };
 
+type PastRun = { id: string; name: string; createdAt: string; formats: { format: Format; approved: boolean }[] };
+
 const DEFAULT_CELLS = [4, 5, 3];
+
+function Approve({ id, format, approved, onDone }: { id: string; format: Format; approved: boolean; onDone: () => void }) {
+  const [state, setState] = useState<"idle" | "busy" | "error" | "done">("idle");
+  const [message, setMessage] = useState("");
+  const isDone = approved || state === "done";
+
+  async function approve() {
+    setState("busy");
+    try {
+      const res = await fetch(`/api/runs/${id}/approve?format=${format}`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Approve failed.");
+      setState("done");
+      onDone();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+      setState("error");
+    }
+  }
+
+  return (
+    <span>
+      <button disabled={state === "busy"} onClick={approve}>
+        {state === "busy" ? "Cutting…, about 30s" : isDone ? "Re-approve" : "Approve"}
+      </button>
+      {isDone && (
+        <>
+          {" "}
+          <a href={`/api/runs/${id}/pdf?format=${format}`} download>Download PDF</a>
+        </>
+      )}
+      {state === "error" && <span style={{ color: "#f66" }}> {message}</span>}
+    </span>
+  );
+}
 
 export default function Page() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -19,6 +56,7 @@ export default function Page() {
   const [name, setName] = useState("");
   const [run, setRun] = useState<RunView | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [past, setPast] = useState<PastRun[]>([]);
   const poll = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const running = run?.status === "running";
@@ -53,6 +91,16 @@ export default function Page() {
     if (!res.ok) return setErrors(body.errors ?? ["Could not start the run."]);
     setRun({ id: body.id, status: "running", steps: [], results: [] });
   }
+
+  const loadPast = () =>
+    fetch("/api/runs")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setPast)
+      .catch(() => {});
+
+  useEffect(() => {
+    loadPast();
+  }, [run?.status]);
 
   useEffect(() => {
     if (!running || !run) return;
@@ -143,10 +191,34 @@ export default function Page() {
             <img src={`/api/runs/${run.id}/image?format=${r.format}`} alt={r.format} style={{ maxWidth: 300 }} />
             <p>
               <a href={`/api/runs/${run.id}/image?format=${r.format}`} download>Download</a>{" · "}
-              <a href={r.figmaUrl} target="_blank" rel="noreferrer">Open in Figma</a>
+              <a href={r.figmaUrl} target="_blank" rel="noreferrer">Open in Figma</a>{" · "}
+              <Approve id={run.id} format={r.format} approved={false} onDone={loadPast} />
             </p>
           </div>
         ))}
+
+      {past.length > 0 && (
+        <section>
+          <h2>Past runs</h2>
+          {past.map((p) => (
+            <div key={p.id} style={{ marginBottom: 16 }}>
+              <strong>{p.name}</strong> <small>{new Date(p.createdAt).toLocaleString()}</small>
+              <div style={{ display: "flex", gap: 16 }}>
+                {p.formats.map((f) => (
+                  <div key={f.format}>
+                    <a href={`/api/runs/${p.id}/image?format=${f.format}`} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/runs/${p.id}/image?format=${f.format}`} alt={f.format} width={100} />
+                    </a>
+                    <div>{f.format}</div>
+                    <Approve id={p.id} format={f.format} approved={f.approved} onDone={loadPast} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
     </main>
   );
 }

@@ -23,8 +23,8 @@
 - [x] Create `src/app/api/runs/[id]/pdf/route.ts` (attachment, UTF-8 filename)
 
 ## UI
-- [ ] Add the `Approve` control (idle/busy/error/done, Download PDF, Re-approve) under each result in `src/app/page.tsx`
-- [ ] Add the Past runs list, refreshed on mount, after a run, and after approve
+- [x] Add the `Approve` control (idle/busy/error/done, Download PDF, Re-approve) under each result in `src/app/page.tsx`
+- [x] Add the Past runs list, refreshed on mount, after a run, and after approve
 
 ## Docs
 - [ ] Update the README Use/Output section for approve + PDF
