@@ -20,10 +20,10 @@
 - [x] Tests in `src/lib/approve.test.ts` (spec cases 10–12)
 
 ## UI
-- [ ] Replace `Approve` with `CutAndPdf` in `src/app/page.tsx` (two buttons, Figma link, hint) for current and past runs
+- [x] Replace `Approve` with `CutAndPdf` in `src/app/page.tsx` (two buttons, Figma link, hint) for current and past runs
 
 ## Docs
-- [ ] Update README "Use" steps
+- [x] Update README "Use" steps
 
 ## Verification
 - [ ] AC1: `cutLayout` binder [4] → 8 entries without cell 4; toploader [4] → 9
