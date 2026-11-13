@@ -15,7 +15,7 @@ export function agyEnv(env: Record<string, string | undefined>) {
 
 // Canvas fills ran past 4m40s; agy waits for the turn ("0s") and our timer is the only cap.
 export function runAgy(cwd: string, prompt: string, timeoutMs = 900_000, spawn: SpawnFn = nodeSpawn) {
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     const opts: SpawnOptions = { cwd, env: agyEnv(process.env) as NodeJS.ProcessEnv, stdio: ["ignore", "pipe", "pipe"] };
     const child = spawn(
       "agy",
@@ -23,7 +23,9 @@ export function runAgy(cwd: string, prompt: string, timeoutMs = 900_000, spawn: 
       opts,
     );
     let err = "";
-    child.stdout?.resume(); // an undrained pipe fills at 64KB and stalls agy
+    let out = "";
+    // read stdout: an undrained pipe fills at 64KB and stalls agy; keep only the tail
+    child.stdout?.on("data", (d) => (out = (out + d).slice(-4000)));
     child.stderr?.on("data", (d) => (err += d));
     const timer = setTimeout(() => {
       child.kill();
@@ -35,7 +37,7 @@ export function runAgy(cwd: string, prompt: string, timeoutMs = 900_000, spawn: 
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      code === 0 ? resolve() : reject(new Error(`agy exited ${code}: ${err.slice(-500)}`));
+      code === 0 ? resolve(out) : reject(new Error(`agy exited ${code}: ${err.slice(-500)}`));
     });
   });
 }
@@ -60,9 +62,17 @@ async function editImage(step: string, inPath: string, outPath: string, instruct
   await writeFile(path.join(dir, "in.png"), await sharp(buf).resize(896, 1200, { fit: "fill" }).png().toBuffer());
   const prompt =
     `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. Instruction: ${instruction}`;
-  await runAgy(dir, prompt, undefined, spawn);
+  const reply = await runAgy(dir, prompt, undefined, spawn);
   const out = await readOutput(dir);
-  if (!out) throw new Error(`${step}: agy returned no image`);
+  if (!out) {
+    // agy exits 0 with no file when the Pro image quota is used up
+    const quota = /exhausted|quota|RESOURCE_EXHAUSTED|429/i.test(reply);
+    throw new Error(
+      quota
+        ? `${step}: Google AI Pro image quota used up, try again later. agy said: ${reply.trim().slice(-300)}`
+        : `${step}: agy returned no image. agy said: ${reply.trim().slice(-300)}`,
+    );
+  }
   await writeFile(outPath, await unpadFrom34(out, box));
 }
 

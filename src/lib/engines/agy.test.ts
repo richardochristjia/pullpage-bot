@@ -48,6 +48,24 @@ describe("agy", () => {
     await expect(agyEngines(spawn).clean(inp, path.join(dir, "o.png"))).rejects.toThrow("clean: agy returned no image");
   });
 
+  it("names the quota when agy exits 0 with no image after a quota error", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "agy-"));
+    const inp = path.join(dir, "in.png");
+    await writeFile(inp, await sharp({ create: { width: 750, height: 1050, channels: 3, background: "red" } }).png().toBuffer());
+    const spawn = (() => {
+      const child: any = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {};
+      setImmediate(() => {
+        child.stdout.emit("data", "You have exhausted your capacity on this model.");
+        child.emit("close", 0);
+      });
+      return child;
+    }) as any;
+    await expect(agyEngines(spawn).fill(inp, path.join(dir, "o.png"))).rejects.toThrow("fill: Google AI Pro image quota used up");
+  });
+
   it("clean returns 750x1050 from a 896x1200 agy output", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "agy-"));
     const inp = path.join(dir, "in.png");
