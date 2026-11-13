@@ -5,7 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { agyEngines, agyEnv, runAgy } from "./agy";
+import { agyEngines, agyEnv, findText, runAgy } from "./agy";
+import { CLEAN_PROMPT, FILL_PROMPT } from "./types";
+
+const noText = async () => [] as string[];
 
 function fakeSpawn(onRun?: (cwd: string) => Promise<void>) {
   const calls: { args: string[]; opts: any }[] = [];
@@ -45,7 +48,7 @@ describe("agy", () => {
     const inp = path.join(dir, "in.png");
     await writeFile(inp, await sharp({ create: { width: 750, height: 1050, channels: 3, background: "red" } }).png().toBuffer());
     const { spawn } = fakeSpawn();
-    await expect(agyEngines(spawn).clean(inp, path.join(dir, "o.png"))).rejects.toThrow("clean: agy returned no image");
+    await expect(agyEngines(spawn, noText).clean(inp, path.join(dir, "o.png"))).rejects.toThrow("clean: agy returned no image");
   });
 
   it("names the quota when agy exits 0 with no image after a quota error", async () => {
@@ -63,7 +66,7 @@ describe("agy", () => {
       });
       return child;
     }) as any;
-    await expect(agyEngines(spawn).fill(inp, path.join(dir, "o.png"))).rejects.toThrow("fill: Google AI Pro image quota used up");
+    await expect(agyEngines(spawn, noText).fill(inp, path.join(dir, "o.png"))).rejects.toThrow("fill: Google AI Pro image quota used up");
   });
 
   it("clean returns 750x1050 from a 896x1200 agy output", async () => {
@@ -74,9 +77,76 @@ describe("agy", () => {
     const { spawn } = fakeSpawn(async (cwd) => {
       await writeFile(path.join(cwd, "out.jpg"), await sharp({ create: { width: 896, height: 1200, channels: 3, background: "blue" } }).jpeg().toBuffer());
     });
-    await agyEngines(spawn).clean(inp, outp);
+    await agyEngines(spawn, noText).clean(inp, outp);
     const m = await sharp(await readFile(outp)).metadata();
     expect([m.width, m.height]).toEqual([750, 1050]);
+  });
+
+  async function setup() {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "agy-"));
+    const inp = path.join(dir, "in.png");
+    await writeFile(inp, await sharp({ create: { width: 750, height: 1050, channels: 3, background: "red" } }).png().toBuffer());
+    const { spawn, calls } = fakeSpawn(async (cwd) => {
+      await writeFile(path.join(cwd, "out.png"), await sharp({ create: { width: 896, height: 1200, channels: 3, background: "blue" } }).png().toBuffer());
+    });
+    const scripted = (...results: string[][]) => {
+      const seen: string[] = [];
+      return { seen, check: async (p: string) => (seen.push(p), results.shift() ?? []) };
+    };
+    return { inp, outp: path.join(dir, "o.png"), spawn, calls, scripted };
+  }
+  const exists = (p: string) => readFile(p).then(() => true, () => false);
+
+  it("prompts match the spec", () => {
+    expect(CLEAN_PROMPT).toBe(
+      "Create a new image from in.png using only the illustration inside the card's art window. Extend that illustration outward in every direction so it fills the whole canvas edge to edge, keeping the main subject at the same position and size. The trading card itself must not appear: no border, frame, boxes, icons, and no text, letters or numbers of any kind. The output is a clean, text-free artwork.",
+    );
+    expect(FILL_PROMPT.endsWith(" The new background must contain no text, letters, numbers, symbols, logos or watermarks.")).toBe(true);
+  });
+
+  it("clean first try: one agy call, file written", async () => {
+    const { inp, outp, spawn, calls, scripted } = await setup();
+    const { check } = scripted([]);
+    await agyEngines(spawn, check).clean(inp, outp);
+    expect(calls).toHaveLength(1);
+    expect(await exists(outp)).toBe(true);
+  });
+
+  it("text then clean: two agy calls, file written", async () => {
+    const { inp, outp, spawn, calls, scripted } = await setup();
+    const { check } = scripted(["Espeon"], []);
+    await agyEngines(spawn, check).clean(inp, outp);
+    expect(calls).toHaveLength(2);
+    expect(await exists(outp)).toBe(true);
+  });
+
+  it("text on both tries throws and writes nothing", async () => {
+    const { inp, outp, spawn, calls, scripted } = await setup();
+    const { check } = scripted(["Espeon"], ["Weakness"]);
+    await expect(agyEngines(spawn, check).fill(inp, outp)).rejects.toThrow('fill: text left on image after retry: "Weakness"');
+    expect(calls).toHaveLength(2);
+    expect(await exists(outp)).toBe(false);
+  });
+
+  it("no image: existing error, check never called", async () => {
+    const { inp, outp, scripted } = await setup();
+    const { check, seen } = scripted();
+    await expect(agyEngines(fakeSpawn().spawn, check).clean(inp, outp)).rejects.toThrow("clean: agy returned no image");
+    expect(seen).toHaveLength(0);
+  });
+
+  it("findText drops lines under 3 letters", async () => {
+    const spawn = ((_c: string, _a: string[], _o: any) => {
+      const child: any = new EventEmitter();
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      setImmediate(() => {
+        child.stdout.emit("data", "*\n10\nEspeon\n");
+        child.emit("close", 0);
+      });
+      return child;
+    }) as any;
+    expect(await findText("x.png", spawn)).toEqual(["Espeon"]);
   });
 
   it("does not stall when agy prints more than a pipe buffer to stdout", async () => {
