@@ -283,3 +283,4 @@ Command: `cd pullpage-bot && npm test && npm run lint && npm run build`.
 ## Divergences
 
 - Branch `link-cut-export` is cut from `cut-to-figma`, not from `main`: `main` holds only the initial commit and none of the cut work this plan builds on. There is no git remote, so delivery degrades to a local branch.
+- `links.ts` also exports `handleLink` (parse, lock and 400/409/500 mapping shared by the routes); not in the plan's file list, within its API design.
