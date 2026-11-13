@@ -22,3 +22,22 @@ outcome: C1 C2 C3 fixed with tests, 3 commits, 21 tests pass
 status: done
 outcome: no changes, tests/lint/build pass
 
+## Spec check
+status: done
+outcome: AC1-AC10 met, divergences documented, RECORD.md written, plan committed
+
+## Verify
+status: done
+outcome: lint, 21 tests, build pass
+
+## Deliver
+status: done
+outcome: no git remote; branch pullpage-bot kept local, not pushed, no pull request
+
+## Browser walkthrough
+status: skipped
+outcome: no fixture at .harness/ - run make-fixture in this repo
+
+## CI status
+status: skipped
+outcome: no remote, no CI
