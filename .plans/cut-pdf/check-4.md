@@ -1,0 +1,3 @@
+- Plan says approve.test covers `listRuns` showing approved (case 11); `listRuns` is a Phase 5 task (src/lib/approve.ts has none yet). Test 11 asserts files and `approvedAt` only; the `listRuns` assertion moves to Phase 5.
+- Plan says `defaultEngines` is in runs.ts and gets `defaultFigmaDeps`; confirmed (src/lib/runs.ts:22). `exportFrame(deps, frameId, format)` already exists (src/lib/engines/figma.ts:87), `cutPieces/buildPdf/pdfFileName` exist (src/lib/cut.ts); `meta.cells` and `fileKey` are written by pipeline.ts:117. `fileKey` is optional in RunInput, so approve returns 500 when it is missing from run.json.
+- Plan holds otherwise; read runs.ts, image route, pipeline.ts save step, cut.ts, figma.ts.

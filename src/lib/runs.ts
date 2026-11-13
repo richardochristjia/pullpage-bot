@@ -19,9 +19,11 @@ const store: Store = (g.__runs ??= { map: new Map() });
 export const getRun = (id: string) => store.map.get(id);
 export const isBusy = () => store.active !== undefined;
 
+export const defaultFigmaDeps = (fileKey: string) => ({ claude: (p: string) => runClaude(p), fetch, fileKey });
+
 export const defaultEngines = (fileKey: string): Engines => ({
   ...agyEngines(),
-  figma: (i) => publishToFigma(i, { claude: (p) => runClaude(p), fetch, fileKey }),
+  figma: (i) => publishToFigma(i, defaultFigmaDeps(fileKey)),
 });
 
 export function startRun(input: RunInput, engines: Engines, root?: string) {
