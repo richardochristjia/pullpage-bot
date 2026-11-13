@@ -1,0 +1,1 @@
+- Node IDs are produced by Haiku inside Figma; the app can only check count and uniqueness, not that IDs belong to the new frame (src/lib/engines/figma.ts). Check: real run, inspect frame layers.

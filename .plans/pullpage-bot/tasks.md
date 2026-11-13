@@ -8,9 +8,9 @@
 - [x] Add `src/lib/engines/agy.ts` (`agyEnv`, `runAgy` with injectable spawn, `clean`, `fill`, output-file check) with `agy.test.ts`
 
 ## Figma step
-- [ ] Add `buildFrameScript` (Automation page, frame, background then card rects) in `src/lib/engines/figma.ts`
-- [ ] Add `runClaude` (Haiku, allowed Figma tools, JSON extraction with one retry) and `publishToFigma` (call 1, POST uploads, call 2, download export, size check)
-- [ ] Add `figma.test.ts` (script content, JSON extraction, node ID mismatch)
+- [x] Add `buildFrameScript` (Automation page, frame, background then card rects) in `src/lib/engines/figma.ts`
+- [x] Add `runClaude` (Haiku, allowed Figma tools, JSON extraction with one retry) and `publishToFigma` (call 1, POST uploads, call 2, download export, size check)
+- [x] Add `figma.test.ts` (script content, JSON extraction, node ID mismatch)
 
 ## Run pipeline and server API
 - [ ] Add `src/lib/pipeline.ts` (`validateRun`, `runPipeline` with step reporting, output only on success) with `pipeline.test.ts` using fake engines
