@@ -6,7 +6,7 @@ import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { listRuns } from "./approve";
-import { exportLink, findLinkPdf, parseFrameLink } from "./links";
+import { exportLink, findLinkPdf, handleLink, parseFrameLink, withLinkLock } from "./links";
 
 const base = "https://www.figma.com/design/KEY/Name";
 
@@ -77,5 +77,28 @@ describe("exportLink", () => {
     expect(doc.getPageCount()).toBe(9);
     expect((await findLinkPdf(r, "7-8"))?.file).toBe("new toploader.pdf");
     expect(await findLinkPdf(r, "../x")).toBeNull();
+  });
+});
+
+describe("link lock", () => {
+  it("second overlapping job gets 409 and the lock is released after a throw", async () => {
+    let release!: () => void;
+    const first = withLinkLock(() => new Promise<string>((r) => (release = () => r("ok"))));
+    expect(await withLinkLock(async () => "no")).toEqual({ status: 409, error: "Busy." });
+    release();
+    expect(await first).toBe("ok");
+    await expect(withLinkLock(async () => { throw new Error("x"); })).rejects.toThrow("x");
+    expect(await withLinkLock(async () => "again")).toBe("again");
+  });
+
+  it("handleLink maps bad link to 400 before the job, job errors to 500", async () => {
+    const deps = { claude: async () => "", fetch, fileKey: "KEY" };
+    let ran = 0;
+    const job = async () => (ran++, { ok: true });
+    expect((await handleLink("nope", deps, job)).status).toBe(400);
+    expect((await handleLink(undefined, deps, job)).status).toBe(400);
+    expect(ran).toBe(0);
+    expect(await handleLink(`${base}?node-id=1-2`, deps, job)).toEqual({ status: 200, body: { ok: true } });
+    expect((await handleLink(`${base}?node-id=1-2`, deps, async () => { throw new Error("boom"); })).status).toBe(500);
   });
 });

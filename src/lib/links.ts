@@ -1,7 +1,7 @@
 import { mkdir, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildPdf, cutFrameSize, cutLayout, cutPieces, pdfFileName } from "./cut";
-import { exportNode, readCutFrame, type FigmaDeps } from "./engines/figma";
+import { cutLinkInFigma, exportNode, readCutFrame, type FigmaDeps } from "./engines/figma";
 import { FORMATS } from "./geometry";
 
 export function parseFrameLink(url: string, fileKey = process.env.FIGMA_FILE_KEY) {
@@ -54,4 +54,38 @@ export async function findLinkPdf(root: string, node: string) {
   const dir = path.join(root, "output", "links", node);
   const f = (await readdir(dir).catch(() => [] as string[])).find((n) => n.endsWith(".pdf"));
   return f ? { file: f, path: path.join(dir, f) } : null;
+}
+
+const g = globalThis as unknown as { __linkBusy?: boolean };
+
+export async function withLinkLock<T>(fn: () => Promise<T>): Promise<T | { status: 409; error: string }> {
+  if (g.__linkBusy) return { status: 409, error: "Busy." };
+  g.__linkBusy = true;
+  try {
+    return await fn();
+  } finally {
+    g.__linkBusy = false;
+  }
+}
+
+export async function cutLink(url: string, deps: FigmaDeps) {
+  const { fileKey, nodeId } = parseFrameLink(url, deps.fileKey);
+  const r = await cutLinkInFigma(deps, nodeId);
+  return { cutUrl: `https://www.figma.com/design/${fileKey}/?node-id=${dashed(r.cutFrameId)}`, format: r.format, cardCells: r.cardCells };
+}
+
+// Parse first (400, no lock, no Claude), then run under the lock (409), other errors are 500.
+export async function handleLink(url: unknown, deps: FigmaDeps, job: (url: string) => Promise<object>) {
+  if (typeof url !== "string") return { status: 400, body: { error: "Missing link." } };
+  try {
+    parseFrameLink(url, deps.fileKey);
+  } catch (e) {
+    return { status: 400, body: { error: (e as Error).message } };
+  }
+  try {
+    const r = await withLinkLock(() => job(url));
+    return "status" in r ? { status: r.status, body: { error: r.error } } : { status: 200, body: r };
+  } catch (e) {
+    return { status: 500, body: { error: (e as Error).message } };
+  }
 }

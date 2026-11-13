@@ -1,0 +1,1 @@
+- Plan holds: routes follow api/runs/[id]/pdf/route.ts; shared handler in links.ts keeps the three routes thin.
