@@ -1,3 +1,4 @@
+import { spawn as nodeSpawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -58,5 +59,11 @@ describe("agy", () => {
     await agyEngines(spawn).clean(inp, outp);
     const m = await sharp(await readFile(outp)).metadata();
     expect([m.width, m.height]).toEqual([750, 1050]);
+  });
+
+  it("does not stall when agy prints more than a pipe buffer to stdout", async () => {
+    const spawn = ((_c: string, _a: string[], o: any) =>
+      nodeSpawn("node", ["-e", "process.stdout.write('x'.repeat(4e6))"], o)) as any;
+    await runAgy(os.tmpdir(), "p", 4000, spawn);
   });
 });

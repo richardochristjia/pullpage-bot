@@ -22,6 +22,7 @@ export function runAgy(cwd: string, prompt: string, timeoutMs = 300_000, spawn: 
       opts,
     );
     let err = "";
+    child.stdout?.resume(); // an undrained pipe fills at 64KB and stalls agy
     child.stderr?.on("data", (d) => (err += d));
     const timer = setTimeout(() => {
       child.kill();
