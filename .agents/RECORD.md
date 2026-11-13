@@ -57,3 +57,9 @@ Entries are added or amended **only with human approval**.
 - (output) Approved cuts are persisted as one PDF per format, one 300 dpi page per piece in row-major order, to `pullpage-bot/output/<runId>/`.
 - (output) Each finished run persists its name, card cells and Figma frame IDs to a metadata file in its output folder, so approval survives a restart.
 - (clean) Cleaned cards and generated backgrounds are checked for text by macOS Vision OCR, and a step whose output still has text after one retry fails the run.
+- (clean) Each run places its cleaned cards in a separate clean frame beside its run frames on the `Automation` page, outside the print path.
+- (links) Pasted Figma frame links are cut one at a time, and each cut frame's link is added to the export list without being exported.
+- (links) Link cuts read the format from the frame size and the card cells from the frame's card layers, with no run metadata.
+- (links) Link exports read the format and card cells from the cut frame's size and pieces, and run only when a person clicks Export.
+- (links) Frame links are accepted only from the configured Figma file.
+- (output) Link exports persist one PDF per cut frame to `pullpage-bot/output/links/`.
