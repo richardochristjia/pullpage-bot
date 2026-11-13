@@ -34,7 +34,7 @@
 - [x] AC8: background sent to Figma under 10MB
 - [x] AC9: `agy` returning no image stops the run, names the step, nothing in `output/`
 - [x] AC10: `npm run build`, `npm run lint`, `npm test` pass
-- [ ] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, create `.agents/RECORD.md` with `/Users/167560.KEVIN/.claude/skills/forge/record-preamble.md` copied verbatim as its body followed by those exact entries; (2b) if the implementation diverged from any planned entry, do not write a wrong entry — surface the divergence in the final summary for the user to resolve
+- [x] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, create `.agents/RECORD.md` with `/Users/167560.KEVIN/.claude/skills/forge/record-preamble.md` copied verbatim as its body followed by those exact entries; (2b) if the implementation diverged from any planned entry, do not write a wrong entry — surface the divergence in the final summary for the user to resolve
 
 ## Manual checks
 - [ ] Goldeen, binder: frame `output_goldeen_binder` on page `Automation`, background behind, card centre, no seam, PNG 2252×3152
