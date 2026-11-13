@@ -154,7 +154,7 @@ describe("figma", () => {
       n.remove = () => (n.parent.children = n.parent.children.filter((c: any) => c !== n));
       n.clone = () => {
         const c = mk(n.type, n.name);
-        for (const k of n.children) c.appendChild({ ...k, parent: c, remove: () => (c.children = c.children.filter((x: any) => x.name !== k.name)) });
+        for (const k of n.children) c.appendChild({ ...k, parent: null, remove: () => (c.children = c.children.filter((x: any) => x.name !== k.name)) });
         return c;
       };
       return n;
@@ -182,12 +182,27 @@ describe("figma", () => {
 
   it("link cut: binder with a card at cell 4 gives 8 pieces and replaces the old cut", async () => {
     const r = cardRect("binder", 4);
-    const f = fakeFigma({ w: 2252, h: 3152, kids: [{ name: "card1", x: r.x + 1, y: r.y }], sibling: "cut_output_g_binder" });
+    const f = fakeFigma({ w: 2252, h: 3152, kids: [{ name: "bg", x: 0, y: 0 }, { name: "card1", x: r.x + 1, y: r.y }], sibling: "cut_output_g_binder" });
     const out = await runLinkCut(f);
     expect(out).toMatchObject({ format: "binder", cardCells: [4] });
     const cuts = f.page.children.filter((c: any) => c.name === "cut_output_g_binder");
     expect(cuts).toHaveLength(1);
     expect(cuts[0].children).toHaveLength(8);
+    // same fill and clip as the run cut script
+    expect(cuts[0].fills).toEqual([{ type: "SOLID", color: { r: 0.9, g: 0.9, b: 0.9 } }]);
+    expect(cuts[0].clipsContent).toBe(true);
+    for (const p of cuts[0].children) {
+      expect(p).toMatchObject({ clipsContent: true, fills: [] });
+      expect(p.children[0].children.map((k: any) => k.name)).toEqual(["bg"]);
+    }
+  });
+
+  it("link cut: a card within 2px counts as a card cell, 3px off does not", async () => {
+    const r = cardRect("binder", 4);
+    const at = (dx: number) => runLinkCut(fakeFigma({ w: 2252, h: 3152, kids: [{ name: "card1", x: r.x + dx, y: r.y - dx }] }));
+    expect((await at(2)).cardCells).toEqual([4]);
+    expect((await at(-2)).cardCells).toEqual([4]);
+    expect((await at(3)).cardCells).toEqual([]);
   });
 
   it("link cut: toploader gives 9 pieces; other sizes and non-page parents throw", async () => {
