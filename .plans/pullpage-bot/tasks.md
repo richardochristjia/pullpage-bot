@@ -4,8 +4,8 @@
 - [x] Add `src/lib/imaging.ts` (`toCard`, `padTo34`, `unpadFrom34`, `composeCanvas`, `jpegUnder`) with `imaging.test.ts`
 
 ## Engines
-- [ ] Add `src/lib/engines/types.ts` (`Engines` interface) and prompts
-- [ ] Add `src/lib/engines/agy.ts` (`agyEnv`, `runAgy` with injectable spawn, `clean`, `fill`, output-file check) with `agy.test.ts`
+- [x] Add `src/lib/engines/types.ts` (`Engines` interface) and prompts
+- [x] Add `src/lib/engines/agy.ts` (`agyEnv`, `runAgy` with injectable spawn, `clean`, `fill`, output-file check) with `agy.test.ts`
 
 ## Figma step
 - [ ] Add `buildFrameScript` (Automation page, frame, background then card rects) in `src/lib/engines/figma.ts`
