@@ -49,3 +49,8 @@ Entries are added or amended **only with human approval**.
 - (background) Background generation is handled by the Antigravity CLI on the user's Google AI subscription, and the result is upscaled to the canvas size.
 - (figma) Frame assembly and export are handled by a headless Claude agent on Figma MCP, which writes to the `Automation` page of the configured Figma file.
 - (output) Finished frames are persisted as PNG files to `pullpage-bot/output/`.
+- (cut) Approving a format re-exports its Figma frame and cuts it into print pieces by fixed grid geometry, with no AI step.
+- (cut) Binder cuts skip every cell that holds a card.
+- (cut) Toploader cuts keep all nine 900×1200 cells.
+- (output) Approved cuts are persisted as one PDF per format, one 300 dpi page per piece in row-major order, to `pullpage-bot/output/<runId>/`.
+- (output) Each finished run persists its name, card cells and Figma frame IDs to a metadata file in its output folder, so approval survives a restart.
