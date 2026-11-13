@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { CANVAS, cardRect } from "./geometry";
 import { padTo34, toCard, unpadFrom34 } from "./imaging";
-import { runPipeline, validateRun, type RunInput } from "./pipeline";
+import { displayName, runPipeline, validateRun, type RunInput } from "./pipeline";
 import type { Engines } from "./engines/types";
 
 const img = (w: number, h: number, c: string) =>
@@ -41,13 +41,19 @@ function fakes() {
         .toBuffer();
       const pngPath = path.join(inp.workDir, `fake_${inp.format}.png`);
       await writeFile(pngPath, out);
-      return { url: `https://figma/${inp.format}`, pngPath };
+      return { url: `https://figma/${inp.format}`, pngPath, frameId: `1:${calls.figma}` };
     },
   };
   return { engines, calls };
 }
 
 describe("pipeline", () => {
+  it("displayName strips extension and path chars", async () => {
+    const c = await card("goldeen_ar.png");
+    expect(displayName({ cards: [c], cells: [4], formats: ["binder"] })).toBe("goldeen_ar");
+    expect(displayName({ cards: [c], cells: [4], formats: ["binder"], name: "a/b:c" })).toBe("abc");
+  });
+
   it("rejects bad input before any engine call", async () => {
     const c = await card("a.png");
     const ok: RunInput = { cards: [c], cells: [4], formats: ["binder"] };
@@ -61,10 +67,15 @@ describe("pipeline", () => {
   it("both formats, 2 cards: clean x2, fill x2, figma x2; canvas size and card pixels exact", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
     const { engines, calls } = fakes();
-    const input: RunInput = { cards: [await card("goldeen.png"), await card("b.png")], cells: [4, 5], formats: ["binder", "toploader"] };
+    const input: RunInput = { cards: [await card("goldeen.png"), await card("b.png")], cells: [4, 5], formats: ["binder", "toploader"], fileKey: "K" };
     const results = await runPipeline("r1", input, engines, () => {}, root);
     expect(calls).toEqual({ clean: 2, fill: 2, figma: 2 });
     expect(results.map((r) => r.format)).toEqual(["binder", "toploader"]);
+    const meta = JSON.parse(await readFile(path.join(root, "output", "r1", "run.json"), "utf8"));
+    expect(meta).toMatchObject({
+      id: "r1", name: "goldeen", slug: "goldeen", cells: [4, 5], fileKey: "K",
+      formats: { binder: { frameId: "1:1" }, toploader: { frameId: "1:2" } },
+    });
     for (const f of ["binder", "toploader"] as const) {
       const file = path.join(root, "output", "r1", `output_goldeen_${f}.png`);
       const out = sharp(file);

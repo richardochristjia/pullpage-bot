@@ -1,0 +1,2 @@
+- Plan holds. Read pipeline.ts (save step, runName/slugify), api/runs/route.ts (overrides name with slug, line ~27), engines/types.ts, engines/figma.ts (reply.frameId at publish return), runs.ts, pipeline.test.ts and figma.test.ts fakes. Only pipeline.test.ts fake `figma` needs `frameId`; figma.test.ts asserts `r.url` and gets `frameId` for free.
+- `validateRun` checks `runName(i)`, so passing the raw display name as `input.name` still validates (slug is computed from it); route must set `fileKey` from env.

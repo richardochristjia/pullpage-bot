@@ -132,5 +132,6 @@ export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
   return {
     url: `https://www.figma.com/design/${fileKey}/?node-id=${String(reply.frameId).replace(":", "-")}`,
     pngPath,
+    frameId: String(reply.frameId),
   };
 }
