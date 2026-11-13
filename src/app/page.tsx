@@ -31,6 +31,7 @@ function CutAndPdf({ id, format, cut, approved, onDone }: { id: string; format: 
       if (!res.ok) throw new Error(body.error ?? "Request failed.");
       if (step === "cut") {
         setIsCut(true);
+        setIsPdf(false);
         setFigmaUrl(body.figmaUrl ?? "");
       } else setIsPdf(true);
       onDone();

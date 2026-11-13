@@ -67,6 +67,24 @@ describe("cut then PDF", () => {
     expect((await approveFormat(root, ID, "binder", async () => png(cutFrameSize("binder").w, cutFrameSize("binder").h))).status).toBe(200);
     expect((await listRuns(root))[0].formats).toEqual([{ format: "binder", cut: true, approved: true }]);
   });
+  it("concurrent cuts of two formats on one run lose no cutFrameId", async () => {
+    const root = await setup();
+    const p = path.join(root, "output", ID, "run.json");
+    const m = JSON.parse(await readFile(p, "utf8"));
+    m.formats.toploader = { frameId: "3:4" };
+    await writeFile(p, JSON.stringify(m));
+    const ids = { binder: "9:1", toploader: "9:2" };
+    const results = await Promise.all((["binder", "toploader"] as const).map((f, i) =>
+      cutFormat(root, ID, f, () => new Promise<string>((r) => setTimeout(() => r(ids[f]), i ? 0 : 30)))));
+    const saved = (await readMeta(root, ID))!.formats;
+    (["binder", "toploader"] as const).forEach((f, i) => { if (results[i].status === 200) expect(saved[f]?.cutFrameId).toBe(ids[f]); });
+  });
+  it("re-cut after a PDF lists the format as not approved", async () => {
+    const root = await setup();
+    await approveFormat(root, ID, "binder", async () => png(cutFrameSize("binder").w, cutFrameSize("binder").h));
+    await cutFormat(root, ID, "binder", async () => "7:7");
+    expect((await listRuns(root))[0].formats).toEqual([{ format: "binder", cut: true, approved: false }]);
+  });
   it("cut guards: 404s, 409 on overlap, 500 on cutter error", async () => {
     const root = await setup();
     const c = async () => "1:1";
