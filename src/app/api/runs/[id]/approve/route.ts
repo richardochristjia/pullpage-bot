@@ -9,7 +9,10 @@ export const runtime = "nodejs";
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const format = new URL(req.url).searchParams.get("format") ?? "";
-  const r = await approveFormat(process.cwd(), id, format, (k, nid, f) => exportNode(defaultFigmaDeps(k), nid, cutFrameSize(f).w, cutFrameSize(f).h));
+  const r = await approveFormat(process.cwd(), id, format, (k, nid, f) => {
+    const { w, h } = cutFrameSize(f);
+    return exportNode(defaultFigmaDeps(k), nid, w, h);
+  });
   const { status, ...body } = r;
   return NextResponse.json(body, { status });
 }
