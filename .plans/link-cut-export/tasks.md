@@ -14,9 +14,9 @@
 - [x] Test the script against a fake `figma` object (binder cell 4, toploader, bad size) and the single-call rule
 
 ## Link export
-- [ ] Add `buildReadCutScript` and `readCutFrame` (retry 2)
-- [ ] Add `exportLink` and `findLinkPdf` to `links.ts` (format from cut size, cells from pieces, layout check, atomic PDF write, old PDF cleanup)
-- [ ] Test export: 6-page binder PDF, wrong PNG size writes nothing, toploader mismatch, re-export cleanup
+- [x] Add `buildReadCutScript` and `readCutFrame` (retry 2)
+- [x] Add `exportLink` and `findLinkPdf` to `links.ts` (format from cut size, cells from pieces, layout check, atomic PDF write, old PDF cleanup)
+- [x] Test export: 6-page binder PDF, wrong PNG size writes nothing, toploader mismatch, re-export cleanup
 
 ## API
 - [ ] Add `withLinkLock` and the lock test (409, released after throw)

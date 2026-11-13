@@ -1,0 +1,1 @@
+- Plan holds: exportNode checks PNG size itself; exportLink parses with deps.fileKey so tests need no env. pdfFileName reused.
