@@ -7,9 +7,9 @@
 - [x] Extract `exportFrame(deps, frameId, format)` from `publishToFigma` in `src/lib/engines/figma.ts`, same messages and retry, with tests
 
 ## Cut + PDF module
-- [ ] Add `pdf-lib@1.17.1` (exact) to `package.json`
-- [ ] Create `src/lib/cut.ts` with `pieceRects`, `cutPieces` (exact size check, flatten alpha to white), `buildPdf`, `pdfFileName`
-- [ ] Create `src/lib/cut.test.ts` covering test cases 1–9 and 13
+- [x] Add `pdf-lib@1.17.1` (exact) to `package.json`
+- [x] Create `src/lib/cut.ts` with `pieceRects`, `cutPieces` (exact size check, flatten alpha to white), `buildPdf`, `pdfFileName`
+- [x] Create `src/lib/cut.test.ts` covering test cases 1–9 and 13
 
 ## Approve route
 - [ ] Create `src/lib/approve.ts` with `isRunId`, `readMeta`, per run+format lock, `approveFormat` (temp file + rename, `approvedAt`)

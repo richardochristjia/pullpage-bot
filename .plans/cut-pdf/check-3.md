@@ -1,0 +1,2 @@
+- Plan holds. Read geometry.ts (CANVAS, FORMATS), pipeline.ts displayName (strips `\/:*?"<>|` + control chars, 80 cap), and pdf-lib 1.17.1 embedPng (decodes PNG to raw pixels, no predictor; alpha goes to a soft mask, hence flatten first).
+- Plan says pdfFileName sanitizes again; displayName's regex lives in pipeline.ts, so cut.ts repeats the char strip rather than importing the pipeline (avoids cut -> pipeline dependency).
