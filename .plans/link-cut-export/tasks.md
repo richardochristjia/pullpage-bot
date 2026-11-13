@@ -19,8 +19,8 @@
 - [x] Test export: 6-page binder PDF, wrong PNG size writes nothing, toploader mismatch, re-export cleanup
 
 ## API
-- [ ] Add `withLinkLock` and the lock test (409, released after throw)
-- [ ] Add `POST /api/links/cut`, `POST /api/links/export`, `GET /api/links/pdf` (400/409/500 mapping, parse before lock)
+- [x] Add `withLinkLock` and the lock test (409, released after throw)
+- [x] Add `POST /api/links/cut`, `POST /api/links/export`, `GET /api/links/pdf` (400/409/500 mapping, parse before lock)
 
 ## UI
 - [ ] Add the `LinkTools` section to `page.tsx`: two textareas, serial loops, per-line status, cut appends to the export box, Export only on click
