@@ -18,7 +18,7 @@
 - [x] Add `POST /api/runs`, `GET /api/runs/[id]`, `GET /api/runs/[id]/image`
 
 ## Screen
-- [ ] Build `src/app/page.tsx`: drop zone (max 3), per-card cell picker, format toggles, name, Run, progress polling, result preview, download, Figma link, error view
+- [x] Build `src/app/page.tsx`: drop zone (max 3), per-card cell picker, format toggles, name, Run, progress polling, result preview, download, Figma link, error view
 
 ## README
 - [ ] Write `README.md` (setup: npm i, agy login, Claude Code + Figma plugin, FIGMA_FILE_KEY; usage; run time; limits)
