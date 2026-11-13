@@ -37,7 +37,7 @@ export async function cutFormat(root: string, id: string, format: string, cutter
   const entry = meta?.formats[format as Format];
   if (!meta || !entry) return { status: 404, error: "Run not found." };
   const f = format as Format;
-  const key = `${id}:${f}`;
+  const key = id; // per run: both formats rewrite the same run.json
   if (locks.has(key)) return { status: 409, error: "Busy." };
   locks.add(key);
   try {
@@ -59,7 +59,7 @@ export async function approveFormat(root: string, id: string, format: string, ex
   if (!meta || !entry) return { status: 404, error: "Run not found." };
   const f = format as Format;
   if (!entry.cutFrameId) return { status: 409, error: "Cut to Figma first." };
-  const key = `${id}:${f}`;
+  const key = id; // per run: both formats rewrite the same run.json
   if (locks.has(key)) return { status: 409, error: "Busy." };
   locks.add(key);
   try {
@@ -90,7 +90,7 @@ export async function listRuns(root: string) {
     if (!meta) continue;
     const formats = [];
     for (const format of Object.keys(meta.formats) as Format[]) {
-      const approved = await stat(path.join(root, "output", id, pdfFileName(meta.name, format))).then(() => true, () => false);
+      const approved = !!meta.formats[format]?.approvedAt && await stat(path.join(root, "output", id, pdfFileName(meta.name, format))).then(() => true, () => false);
       formats.push({ format, cut: !!meta.formats[format]?.cutFrameId, approved });
     }
     runs.push({ id, name: meta.name, createdAt: meta.createdAt, formats });
