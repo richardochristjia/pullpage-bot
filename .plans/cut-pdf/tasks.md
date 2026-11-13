@@ -4,7 +4,7 @@
 - [x] Write `output/<id>/run.json` (id, name, slug, cells, fileKey, createdAt, formats[f].frameId) in the save step, with a test
 
 ## Export helper
-- [ ] Extract `exportFrame(deps, frameId, format)` from `publishToFigma` in `src/lib/engines/figma.ts`, same messages and retry, with tests
+- [x] Extract `exportFrame(deps, frameId, format)` from `publishToFigma` in `src/lib/engines/figma.ts`, same messages and retry, with tests
 
 ## Cut + PDF module
 - [ ] Add `pdf-lib@1.17.1` (exact) to `package.json`
