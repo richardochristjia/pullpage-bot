@@ -1,0 +1,3 @@
+- The use_figma clone-and-clip script was never run against real Figma (src/lib/engines/figma.ts buildCutScript). Check: press Cut to Figma on a toploader run and a binder run.
+- Haiku may paraphrase the long script in the prompt; the cut call is not retried (one try). Check: cut a real run and open the cut frame.
+- Exported cut frame size must be exactly 2578x3478 / 3028x3928; a real export may differ (e.g. clone effects overflow). Check: Make PDF after a real cut.

@@ -26,14 +26,14 @@
 - [x] Update README "Use" steps
 
 ## Verification
-- [ ] AC1: `cutLayout` binder [4] → 8 entries without cell 4; toploader [4] → 9
-- [ ] AC2: `buildCutScript` removes only `card<n>` layers, offsets clones, one piece per entry at `dst`
-- [ ] AC3: Make PDF without cut → 409 `Cut to Figma first.`, no PDF
-- [ ] AC4: wrong cut-frame export size → clear error, no PDF
-- [ ] AC5: sliced pieces byte-equal to reference extracts; PDF pages as today
-- [ ] AC6: cut route 404 for `../x`/bad format/missing run, 409 on overlap; success saves cutFrameId and clears approvedAt
-- [ ] AC7: `npm test`, `npm run lint`, `npm run build` pass
-- [ ] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, replace the two `(cut)` entries named there with the four new entries, verbatim, in `.agents/RECORD.md`; (2b) if the implementation diverged, do not write a wrong entry — surface the divergence in the final summary
+- [x] AC1: `cutLayout` binder [4] → 8 entries without cell 4; toploader [4] → 9
+- [x] AC2: `buildCutScript` removes only `card<n>` layers, offsets clones, one piece per entry at `dst`
+- [x] AC3: Make PDF without cut → 409 `Cut to Figma first.`, no PDF
+- [x] AC4: wrong cut-frame export size → clear error, no PDF
+- [x] AC5: sliced pieces byte-equal to reference extracts; PDF pages as today
+- [x] AC6: cut route 404 for `../x`/bad format/missing run, 409 on overlap; success saves cutFrameId and clears approvedAt
+- [x] AC7: `npm test`, `npm run lint`, `npm run build` pass
+- [x] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, replace the two `(cut)` entries named there with the four new entries, verbatim, in `.agents/RECORD.md`; (2b) if the implementation diverged, do not write a wrong entry — surface the divergence in the final summary
 
 ## Manual checks
 - [ ] manual: toploader run → Cut to Figma → cut frame with 9 pieces, card cell shows background only
