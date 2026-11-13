@@ -1,0 +1,1 @@
+- Plan holds: buildCutScript read; link variant is a separate function (buildCutScript unchanged). FORMATS lives in geometry.ts.

@@ -9,9 +9,9 @@
 - [x] Wire `cleanFrame` in `defaultEngines`; update `pipeline.test.ts` fakes and add the clean-frame tests
 
 ## Link cut
-- [ ] Add `buildLinkCutScript` (format from size, cells from card layers, replace `cut_<name>` sibling, page-parent check)
-- [ ] Add `cutLinkInFigma` (one Claude call, validate reply)
-- [ ] Test the script against a fake `figma` object (binder cell 4, toploader, bad size) and the single-call rule
+- [x] Add `buildLinkCutScript` (format from size, cells from card layers, replace `cut_<name>` sibling, page-parent check)
+- [x] Add `cutLinkInFigma` (one Claude call, validate reply)
+- [x] Test the script against a fake `figma` object (binder cell 4, toploader, bad size) and the single-call rule
 
 ## Link export
 - [ ] Add `buildReadCutScript` and `readCutFrame` (retry 2)

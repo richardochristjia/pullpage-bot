@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { cardRect } from "../geometry";
 import { cutLayout } from "../cut";
-import { buildCleanFrameScript, buildCutScript, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, publishCleanFrame, publishToFigma } from "./figma";
+import { buildCleanFrameScript, buildCutScript, buildLinkCutScript, cutLinkInFigma, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, publishCleanFrame, publishToFigma } from "./figma";
 
 describe("figma", () => {
   it("script has size, page, rects, background before cards", () => {
@@ -139,5 +139,73 @@ describe("figma", () => {
     expect(posted).toEqual(["u1", "u2"]);
     const one = '{"frameId":"1:2","uploads":[{"nodeId":"1:3","submitUrl":"u1"}]}';
     await expect(publishCleanFrame({ name: "g", cleaned, workDir: "" }, { claude: async () => one, fetch: fetchFake, fileKey: "K" })).rejects.toThrow("unexpected upload list");
+  });
+
+  // Minimal fake of the figma plugin API, enough to run the link cut script body.
+  function fakeFigma(src: { w: number; h: number; parent?: string; kids?: { name: string; x: number; y: number }[]; sibling?: string }) {
+    const mk = (type: string, name = "") => {
+      const n: any = { type, name, children: [], x: 0, y: 0, width: 0, height: 0, parent: null };
+      n.resize = (w: number, h: number) => ((n.width = w), (n.height = h));
+      n.appendChild = (c: any) => {
+        c.parent?.children.splice(c.parent.children.indexOf(c), 1);
+        c.parent = n;
+        n.children.push(c);
+      };
+      n.remove = () => (n.parent.children = n.parent.children.filter((c: any) => c !== n));
+      n.clone = () => {
+        const c = mk(n.type, n.name);
+        for (const k of n.children) c.appendChild({ ...k, parent: c, remove: () => (c.children = c.children.filter((x: any) => x.name !== k.name)) });
+        return c;
+      };
+      return n;
+    };
+    const page = mk(src.parent ?? "PAGE", "Automation");
+    const frame = mk("FRAME", "output_g_binder");
+    frame.resize(src.w, src.h);
+    for (const k of src.kids ?? []) frame.children.push({ ...k, type: "RECTANGLE", parent: frame, remove: () => (frame.children = frame.children.filter((c: any) => c !== k)) });
+    page.appendChild(frame);
+    if (src.sibling) page.appendChild(mk("FRAME", src.sibling));
+    const figma = { getNodeByIdAsync: async () => frame, setCurrentPageAsync: async () => {}, createFrame: () => { const n = mk("FRAME"); page.appendChild(n); return n; }, root: {} };
+    return { figma, page };
+  }
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+  const runLinkCut = (f: ReturnType<typeof fakeFigma>) => new AsyncFunction("figma", buildLinkCutScript({ nodeId: "1:2" }))(f.figma);
+
+  it("link cut script embeds both formats and the guards", () => {
+    const s = buildLinkCutScript({ nodeId: "1:2" });
+    expect(s).toContain("2578");
+    expect(s).toContain("3028");
+    expect(s).toContain('"cut_" + src.name');
+    expect(s).toContain("/^card\\d+$/");
+    expect(s).toContain('src.parent.type !== "PAGE"');
+  });
+
+  it("link cut: binder with a card at cell 4 gives 8 pieces and replaces the old cut", async () => {
+    const r = cardRect("binder", 4);
+    const f = fakeFigma({ w: 2252, h: 3152, kids: [{ name: "card1", x: r.x + 1, y: r.y }], sibling: "cut_output_g_binder" });
+    const out = await runLinkCut(f);
+    expect(out).toMatchObject({ format: "binder", cardCells: [4] });
+    const cuts = f.page.children.filter((c: any) => c.name === "cut_output_g_binder");
+    expect(cuts).toHaveLength(1);
+    expect(cuts[0].children).toHaveLength(8);
+  });
+
+  it("link cut: toploader gives 9 pieces; other sizes and non-page parents throw", async () => {
+    const f = fakeFigma({ w: 2702, h: 3602 });
+    expect((await runLinkCut(f)).format).toBe("toploader");
+    expect(f.page.children.find((c: any) => c.name === "cut_output_g_binder").children).toHaveLength(9);
+    await expect(runLinkCut(fakeFigma({ w: 800, h: 600 }))).rejects.toThrow("frame is 800x600, not binder or toploader");
+    await expect(runLinkCut(fakeFigma({ w: 2252, h: 3152, parent: "SECTION" }))).rejects.toThrow("directly on a page");
+  });
+
+  it("cutLinkInFigma makes one Claude call and rejects a bad format", async () => {
+    let n = 0;
+    const ok = async () => (n++, '{"cutFrameId":"5:5","format":"binder","cardCells":[4]}');
+    await expect(cutLinkInFigma({ claude: ok, fetch, fileKey: "K" }, "1:2")).resolves.toEqual({ cutFrameId: "5:5", format: "binder", cardCells: [4] });
+    expect(n).toBe(1);
+    let m = 0;
+    const bad = async () => (m++, '{"cutFrameId":"5:5","format":"poster"}');
+    await expect(cutLinkInFigma({ claude: bad, fetch, fileKey: "K" }, "1:2")).rejects.toThrow();
+    expect(m).toBe(1);
   });
 });

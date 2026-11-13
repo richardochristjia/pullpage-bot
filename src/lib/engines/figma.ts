@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { cutFrameSize, cutLayout } from "../cut";
-import { CANVAS, CARD, cardRect, type Format } from "../geometry";
+import { CANVAS, CARD, FORMATS, cardRect, type Format } from "../geometry";
 import { jpegUnder } from "../imaging";
 import type { CleanFrameInput, FigmaInput } from "./types";
 
@@ -145,6 +145,63 @@ for (const q of ${JSON.stringify(pieces)}) {
   for (const n of [...c.children]) if (/^card\\d+$/.test(n.name)) n.remove();
 }
 return { cutFrameId: cut.id };`;
+}
+
+export function buildLinkCutScript(o: { nodeId: string }) {
+  const L = Object.fromEntries(
+    FORMATS.map((f) => [
+      f,
+      {
+        w: CANVAS[f].w,
+        h: CANVAS[f].h,
+        size: cutFrameSize(f),
+        rects: Array.from({ length: 9 }, (_, c) => cardRect(f, c)),
+        pieces: cutLayout(f, []).map((p) => ({ cell: p.cell, sx: p.src.x, sy: p.src.y, dx: p.dst.x, dy: p.dst.y, w: p.w, h: p.h })),
+      },
+    ]),
+  );
+  return `const L = ${JSON.stringify(L)};
+const src = await figma.getNodeByIdAsync(${JSON.stringify(o.nodeId)});
+if (!src || src.type !== "FRAME") throw new Error("frame not found");
+if (!src.parent || src.parent.type !== "PAGE") throw new Error("frame must sit directly on a page");
+await figma.setCurrentPageAsync(src.parent);
+const W = Math.round(src.width), H = Math.round(src.height);
+const fmt = Object.keys(L).find((k) => L[k].w === W && L[k].h === H);
+if (!fmt) throw new Error("frame is " + W + "x" + H + ", not binder or toploader");
+const cardCells = [];
+for (const n of src.children) {
+  if (!/^card\\d+$/.test(n.name)) continue;
+  const i = L[fmt].rects.findIndex((r) => Math.abs(r.x - n.x) <= 2 && Math.abs(r.y - n.y) <= 2);
+  if (i >= 0 && !cardCells.includes(i)) cardCells.push(i);
+}
+const cutName = "cut_" + src.name;
+for (const n of [...src.parent.children]) if (n.type === "FRAME" && n.name === cutName) n.remove();
+const cut = figma.createFrame();
+cut.name = cutName;
+cut.resize(L[fmt].size.w, L[fmt].size.h);
+cut.x = src.x + src.width + 200; cut.y = src.y;
+cut.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
+cut.clipsContent = true;
+for (const q of L[fmt].pieces) {
+  if (fmt === "binder" && cardCells.includes(q.cell)) continue;
+  const p = figma.createFrame(); p.name = "piece " + (q.cell + 1);
+  p.resize(q.w, q.h); p.clipsContent = true; p.fills = [];
+  cut.appendChild(p); p.x = q.dx; p.y = q.dy;
+  const c = src.clone(); p.appendChild(c);
+  c.x = -q.sx; c.y = -q.sy;
+  for (const n of [...c.children]) if (/^card\\d+$/.test(n.name)) n.remove();
+}
+return { cutFrameId: cut.id, format: fmt, cardCells };`;
+}
+
+export async function cutLinkInFigma(deps: FigmaDeps, nodeId: string) {
+  const reply = await askJson(
+    deps,
+    `Use the Figma MCP tools. 1) Call create_session with fileKey "${deps.fileKey}". 2) Call use_figma with fileKey "${deps.fileKey}" and this code verbatim:\n${buildLinkCutScript({ nodeId })}\nReply with ONLY JSON: {"cutFrameId":"...","format":"...","cardCells":[...]}`,
+    1,
+  );
+  if (!reply.cutFrameId || !FORMATS.includes(reply.format)) throw new Error("figma: unexpected cut reply");
+  return { cutFrameId: String(reply.cutFrameId), format: reply.format as Format, cardCells: (reply.cardCells ?? []) as number[] };
 }
 
 export async function cutToFigma(deps: FigmaDeps, frameId: string, format: Format, cardCells: number[], name: string, oldCutFrameId?: string): Promise<string> {
