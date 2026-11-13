@@ -1,0 +1,1 @@
+- Plan holds: the export block in `src/lib/engines/figma.ts:119-129` moves into `exportFrame(deps, frameId, format)` unchanged (uses `deps.fileKey`). `frameId` is already returned (phase 1). Read figma.ts and figma.test.ts. Test 14 needs an explicit `frameId` "1:2" assertion in the happy path.

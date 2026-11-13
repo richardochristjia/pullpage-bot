@@ -4,7 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { cardRect } from "../geometry";
-import { buildFrameScript, extractJson, publishToFigma } from "./figma";
+import { buildFrameScript, exportFrame, extractJson, publishToFigma } from "./figma";
 
 describe("figma", () => {
   it("script has size, page, rects, background before cards", () => {
@@ -65,5 +65,26 @@ describe("figma", () => {
     const r = await publishToFigma(input, { claude: async () => replies.shift()!, fetch: fakeFetch, fileKey: "K" });
     expect(posted).toEqual(["http://up/1", "http://up/2"]);
     expect(r.url).toBe("https://www.figma.com/design/K/?node-id=1-2");
+    expect(r.frameId).toBe("1:2");
+  });
+
+  it("exportFrame retries one garbage reply and returns the PNG", async () => {
+    const replies = ["garbage", '{"exportUrl":"http://exp"}'];
+    const prompts: string[] = [];
+    const exported = await png(2252, 3152);
+    const fakeFetch = (async () => ({ ok: true, arrayBuffer: async () => exported.buffer.slice(exported.byteOffset, exported.byteOffset + exported.length) })) as any;
+    const claude = async (p: string) => (prompts.push(p), replies.shift()!);
+    const out = await exportFrame({ claude, fetch: fakeFetch, fileKey: "K" }, "1:2", "binder");
+    expect(out.equals(exported)).toBe(true);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain('fileKey "K" and nodeId "1:2"');
+  });
+
+  it("exportFrame rejects a wrong-size export", async () => {
+    const wrong = await png(2251, 3152);
+    const fakeFetch = (async () => ({ ok: true, arrayBuffer: async () => wrong.buffer.slice(wrong.byteOffset, wrong.byteOffset + wrong.length) })) as any;
+    await expect(exportFrame({ claude: async () => '{"exportUrl":"u"}', fetch: fakeFetch, fileKey: "K" }, "1:2", "binder")).rejects.toThrow(
+      "figma: export is 2251x3152, expected 2252x3152",
+    );
   });
 });

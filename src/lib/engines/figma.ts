@@ -84,6 +84,21 @@ async function askJson(deps: FigmaDeps, prompt: string, tries: number) {
   }
 }
 
+export async function exportFrame(deps: FigmaDeps, frameId: string, format: Format): Promise<Buffer> {
+  const exp = await askJson(
+    deps,
+    `Use the Figma MCP tools. Call download_assets with fileKey "${deps.fileKey}" and nodeId "${frameId}". Reply with ONLY JSON: {"exportUrl":"..."}`,
+    2,
+  );
+  const res = await deps.fetch(exp.exportUrl);
+  if (!res.ok) throw new Error(`figma: export download failed: ${res.status}`);
+  const png = Buffer.from(await res.arrayBuffer());
+  const m = await sharp(png).metadata();
+  const { w, h } = CANVAS[format];
+  if (m.width !== w || m.height !== h) throw new Error(`figma: export is ${m.width}x${m.height}, expected ${w}x${h}`);
+  return png;
+}
+
 export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
   const { fileKey } = deps;
   const script = buildFrameScript({
@@ -116,17 +131,7 @@ export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
     if (!body.success) throw new Error(`figma: upload failed: ${body.error ?? res.status}`);
   }
 
-  const exp = await askJson(
-    deps,
-    `Use the Figma MCP tools. Call download_assets with fileKey "${fileKey}" and nodeId "${reply.frameId}". Reply with ONLY JSON: {"exportUrl":"..."}`,
-    2,
-  );
-  const res = await deps.fetch(exp.exportUrl);
-  if (!res.ok) throw new Error(`figma: export download failed: ${res.status}`);
-  const png = Buffer.from(await res.arrayBuffer());
-  const m = await sharp(png).metadata();
-  const { w, h } = CANVAS[input.format];
-  if (m.width !== w || m.height !== h) throw new Error(`figma: export is ${m.width}x${m.height}, expected ${w}x${h}`);
+  const png = await exportFrame(deps, String(reply.frameId), input.format);
   const pngPath = path.join(input.workDir, `output_${input.name}_${input.format}.png`);
   await writeFile(pngPath, png);
   return {
