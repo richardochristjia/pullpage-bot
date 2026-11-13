@@ -10,14 +10,14 @@
 - [x] Tests in `src/lib/engines/figma.test.ts` (spec cases 7–9)
 
 ## Cut route
-- [ ] Add `cutFormat` to `src/lib/approve.ts` (guards, shared lock, save cutFrameId, clear approvedAt)
-- [ ] Add `src/app/api/runs/[id]/cut/route.ts`
+- [x] Add `cutFormat` to `src/lib/approve.ts` (guards, shared lock, save cutFrameId, clear approvedAt)
+- [x] Add `src/app/api/runs/[id]/cut/route.ts`
 
 ## Make PDF
-- [ ] `approveFormat` requires `cutFrameId` (409 `Cut to Figma first.`) and exports the cut frame
-- [ ] Update approve route exporter to `exportNode` at `cutFrameSize`
-- [ ] `listRuns` reports `cut`
-- [ ] Tests in `src/lib/approve.test.ts` (spec cases 10–12)
+- [x] `approveFormat` requires `cutFrameId` (409 `Cut to Figma first.`) and exports the cut frame
+- [x] Update approve route exporter to `exportNode` at `cutFrameSize`
+- [x] `listRuns` reports `cut`
+- [x] Tests in `src/lib/approve.test.ts` (spec cases 10–12)
 
 ## UI
 - [ ] Replace `Approve` with `CutAndPdf` in `src/app/page.tsx` (two buttons, Figma link, hint) for current and past runs
