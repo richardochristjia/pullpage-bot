@@ -13,9 +13,9 @@
 - [x] Add `figma.test.ts` (script content, JSON extraction, node ID mismatch)
 
 ## Run pipeline and server API
-- [ ] Add `src/lib/pipeline.ts` (`validateRun`, `runPipeline` with step reporting, output only on success) with `pipeline.test.ts` using fake engines
-- [ ] Add `src/lib/runs.ts` (in-memory store, single active run)
-- [ ] Add `POST /api/runs`, `GET /api/runs/[id]`, `GET /api/runs/[id]/image`
+- [x] Add `src/lib/pipeline.ts` (`validateRun`, `runPipeline` with step reporting, output only on success) with `pipeline.test.ts` using fake engines
+- [x] Add `src/lib/runs.ts` (in-memory store, single active run)
+- [x] Add `POST /api/runs`, `GET /api/runs/[id]`, `GET /api/runs/[id]/image`
 
 ## Screen
 - [ ] Build `src/app/page.tsx`: drop zone (max 3), per-card cell picker, format toggles, name, Run, progress polling, result preview, download, Figma link, error view

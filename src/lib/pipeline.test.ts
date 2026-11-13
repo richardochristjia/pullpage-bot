@@ -1,0 +1,93 @@
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import sharp from "sharp";
+import { describe, expect, it } from "vitest";
+import { CANVAS, cardRect } from "./geometry";
+import { padTo34, toCard, unpadFrom34 } from "./imaging";
+import { runPipeline, validateRun, type RunInput } from "./pipeline";
+import type { Engines } from "./engines/types";
+
+const img = (w: number, h: number, c: string) =>
+  sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
+
+async function card(name: string) {
+  // gradient-ish so pixel identity is meaningful
+  const raw = Buffer.alloc(736 * 1024 * 3);
+  for (let i = 0; i < raw.length; i++) raw[i] = (i * 7) % 256;
+  return { name, type: "image/png", buf: await sharp(raw, { raw: { width: 736, height: 1024, channels: 3 } }).png().toBuffer() };
+}
+
+function fakes() {
+  const calls = { clean: 0, fill: 0, figma: 0 };
+  const engines: Engines = {
+    async clean(i, o) {
+      calls.clean++;
+      await writeFile(o, await readFile(i));
+    },
+    async fill(i, o) {
+      calls.fill++;
+      const { width, height } = await sharp(i).metadata();
+      const { box } = await padTo34(await img(width!, height!, "green"), width!, height!);
+      await writeFile(o, await unpadFrom34(await img(896, 1200, "green"), box));
+    },
+    async figma(inp) {
+      calls.figma++;
+      const base = await sharp(inp.bg).png().toBuffer();
+      const out = await sharp(base)
+        .composite(inp.originals.map((o) => ({ input: o.png, left: cardRect(inp.format, o.cell).x, top: cardRect(inp.format, o.cell).y })))
+        .png()
+        .toBuffer();
+      const pngPath = path.join(inp.workDir, `fake_${inp.format}.png`);
+      await writeFile(pngPath, out);
+      return { url: `https://figma/${inp.format}`, pngPath };
+    },
+  };
+  return { engines, calls };
+}
+
+describe("pipeline", () => {
+  it("rejects bad input before any engine call", async () => {
+    const c = await card("a.png");
+    const ok: RunInput = { cards: [c], cells: [4], formats: ["binder"] };
+    expect(validateRun(ok, "K")).toEqual([]);
+    expect(validateRun({ ...ok, cards: [] , cells: []}, "K")).not.toEqual([]);
+    expect(validateRun({ ...ok, cards: [c, c, c, c], cells: [0, 1, 2, 3] }, "K")).not.toEqual([]);
+    expect(validateRun({ ...ok, cards: [c, c], cells: [4, 4] }, "K")).not.toEqual([]);
+    expect(validateRun(ok, "")).not.toEqual([]);
+  });
+
+  it("both formats, 2 cards: clean x2, fill x2, figma x2; canvas size and card pixels exact", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const { engines, calls } = fakes();
+    const input: RunInput = { cards: [await card("goldeen.png"), await card("b.png")], cells: [4, 5], formats: ["binder", "toploader"] };
+    const results = await runPipeline("r1", input, engines, () => {}, root);
+    expect(calls).toEqual({ clean: 2, fill: 2, figma: 2 });
+    expect(results.map((r) => r.format)).toEqual(["binder", "toploader"]);
+    for (const f of ["binder", "toploader"] as const) {
+      const file = path.join(root, "output", "r1", `output_goldeen_${f}.png`);
+      const out = sharp(file);
+      const m = await out.metadata();
+      expect([m.width, m.height]).toEqual([CANVAS[f].w, CANVAS[f].h]);
+      const r = cardRect(f, 4);
+      const got = await sharp(file).extract({ left: r.x, top: r.y, width: r.w, height: r.h }).removeAlpha().raw().toBuffer();
+      const orig = await sharp(await toCard(input.cards[0].buf)).raw().toBuffer();
+      expect(got.length).toBe(orig.length);
+      expect(got.equals(orig)).toBe(true);
+    }
+  }, 60000);
+
+  it("clean writing no file fails the run, names the step, leaves output empty", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const { engines } = fakes();
+    engines.clean = async () => {
+      throw new Error("clean: agy returned no image");
+    };
+    const steps: string[] = [];
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder"] };
+    await expect(runPipeline("r2", input, engines, (l, s) => steps.push(`${l}:${s}`), root)).rejects.toThrow("clean card 1:");
+    expect(steps).toContain("clean card 1:failed");
+    expect(existsSync(path.join(root, "output"))).toBe(false);
+  });
+});
