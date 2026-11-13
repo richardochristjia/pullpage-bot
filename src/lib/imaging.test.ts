@@ -12,6 +12,20 @@ describe("imaging", () => {
     expect([m.width, m.height]).toEqual([750, 1050]);
   });
 
+  it("toCard honours EXIF orientation", async () => {
+    // 1050x750 pixels, left half red, right half blue; orientation 6 turns it upright with red on top
+    const raw = Buffer.alloc(1050 * 750 * 3);
+    for (let y = 0; y < 750; y++) for (let x = 0; x < 1050; x++) {
+      const i = (y * 1050 + x) * 3;
+      raw[i] = x < 525 ? 255 : 0;
+      raw[i + 2] = x < 525 ? 0 : 255;
+    }
+    const jpg = await sharp(raw, { raw: { width: 1050, height: 750, channels: 3 } }).withMetadata({ orientation: 6 }).jpeg({ quality: 95 }).toBuffer();
+    const out = await sharp(await toCard(jpg)).raw().toBuffer();
+    const i = 1049 * 750 * 3; // bottom-left pixel
+    expect(out[i + 2]).toBeGreaterThan(200);
+  });
+
   it("pad then unpad keeps size and centre pixels", async () => {
     const canvas = await solid(2252, 3152);
     const { buf, box } = await padTo34(canvas, 2252, 3152);

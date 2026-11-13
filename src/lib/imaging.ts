@@ -6,7 +6,7 @@ const WHITE = { r: 255, g: 255, b: 255, alpha: 1 };
 export type Box = { left: number; top: number; w: number; h: number; pw: number; ph: number };
 
 export const toCard = (buf: Buffer) =>
-  sharp(buf).resize(CARD.w, CARD.h, { fit: "fill" }).png().toBuffer();
+  sharp(buf).rotate().resize(CARD.w, CARD.h, { fit: "fill" }).png().toBuffer();
 
 export async function padTo34(buf: Buffer, w: number, h: number) {
   const pw = w / h < 3 / 4 ? Math.round((h * 3) / 4) : w;
