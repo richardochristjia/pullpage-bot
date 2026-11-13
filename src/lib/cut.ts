@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
-import { CANVAS, type Format } from "./geometry";
+import { type Format } from "./geometry";
 
 // Match cardRect and CANVAS: 3*750+2 = 2252, 3*900+2 = 2702.
 const PIECE = {
@@ -8,24 +8,41 @@ const PIECE = {
   toploader: { w: 900, h: 1200, sx: 901, sy: 1201 },
 };
 
-export function pieceRects(format: Format, cardCells: number[]) {
+export const PAD = 100;
+export const GAP = 64;
+
+export function cutFrameSize(format: Format) {
+  const { w, h } = PIECE[format];
+  return { w: 2 * PAD + 3 * w + 2 * GAP, h: 2 * PAD + 3 * h + 2 * GAP };
+}
+
+// src = the cell's origin in the run frame, dst = its spot in the cut frame.
+export function cutLayout(format: Format, cardCells: number[]) {
   const { w, h, sx, sy } = PIECE[format];
-  const rects = [];
+  const out = [];
   for (let cell = 0; cell < 9; cell++) {
     if (format === "binder" && cardCells.includes(cell)) continue;
-    rects.push({ cell, left: (cell % 3) * sx, top: Math.floor(cell / 3) * sy, width: w, height: h });
+    const col = cell % 3;
+    const row = Math.floor(cell / 3);
+    out.push({
+      cell,
+      src: { x: col * sx, y: row * sy },
+      dst: { x: PAD + col * (w + GAP), y: PAD + row * (h + GAP) },
+      w,
+      h,
+    });
   }
-  return rects;
+  return out;
 }
 
 export async function cutPieces(png: Buffer, format: Format, cardCells: number[]): Promise<Buffer[]> {
   const m = await sharp(png).metadata();
-  const { w, h } = CANVAS[format];
+  const { w, h } = cutFrameSize(format);
   if (m.width !== w || m.height !== h) throw new Error(`cut: image is ${m.width}x${m.height}, expected ${w}x${h}`);
   // extract only: no resize, so pixels are copied as-is. Alpha is flattened on white; opaque RGB is untouched.
   return Promise.all(
-    pieceRects(format, cardCells).map(({ cell: _c, ...rect }) => {
-      let s = sharp(png).extract(rect);
+    cutLayout(format, cardCells).map((p) => {
+      let s = sharp(png).extract({ left: p.dst.x, top: p.dst.y, width: p.w, height: p.h });
       if (m.hasAlpha) s = s.flatten({ background: "#ffffff" });
       return s.removeAlpha().png().toBuffer();
     }),
