@@ -24,16 +24,16 @@
 - [x] Write `README.md` (setup: npm i, agy login, Claude Code + Figma plugin, FIGMA_FILE_KEY; usage; run time; limits)
 
 ## Verification
-- [ ] AC1: binder cells at 751/1051 steps; toploader card 75px inset, centre (976,1276)
-- [ ] AC2: any input image comes out 750×1050
-- [ ] AC3: 896×1200 background comes out at exact canvas size
-- [ ] AC4: final canvas exactly 2252×3152 or 2702×3602
-- [ ] AC5: with fake engines, original card pixel-identical in its cell in the final PNG
-- [ ] AC6: >3 cards, 0 cards, duplicate cells rejected before any engine call
-- [ ] AC7: `agy` started without `GEMINI_API_KEY` or `GOOGLE_API_KEY`
-- [ ] AC8: background sent to Figma under 10MB
-- [ ] AC9: `agy` returning no image stops the run, names the step, nothing in `output/`
-- [ ] AC10: `npm run build`, `npm run lint`, `npm test` pass
+- [x] AC1: binder cells at 751/1051 steps; toploader card 75px inset, centre (976,1276)
+- [x] AC2: any input image comes out 750×1050
+- [x] AC3: 896×1200 background comes out at exact canvas size
+- [x] AC4: final canvas exactly 2252×3152 or 2702×3602
+- [x] AC5: with fake engines, original card pixel-identical in its cell in the final PNG
+- [x] AC6: >3 cards, 0 cards, duplicate cells rejected before any engine call
+- [x] AC7: `agy` started without `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+- [x] AC8: background sent to Figma under 10MB
+- [x] AC9: `agy` returning no image stops the run, names the step, nothing in `output/`
+- [x] AC10: `npm run build`, `npm run lint`, `npm test` pass
 - [ ] Record Updates: (1) review the complete implementation; (2a) if it matches the planned Record Updates in plan.md, create `.agents/RECORD.md` with `/Users/167560.KEVIN/.claude/skills/forge/record-preamble.md` copied verbatim as its body followed by those exact entries; (2b) if the implementation diverged from any planned entry, do not write a wrong entry — surface the divergence in the final summary for the user to resolve
 
 ## Manual checks
