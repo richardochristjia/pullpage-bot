@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
-import { type Format } from "./geometry";
+import type { Format } from "./geometry";
 
 // Match cardRect and CANVAS: 3*750+2 = 2252, 3*900+2 = 2702.
 const PIECE = {
