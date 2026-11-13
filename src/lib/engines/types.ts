@@ -8,9 +8,12 @@ export type FigmaInput = {
   workDir: string;
 };
 
+export type CleanFrameInput = { name: string; cleaned: Buffer[]; workDir: string }; // cleaned: 750x1050 PNGs
+
 export interface Engines {
   clean(inPng: string, outPath: string): Promise<void>;
   fill(inPng: string, outPath: string): Promise<void>;
+  cleanFrame(input: CleanFrameInput): Promise<{ frameId: string }>;
   figma(input: FigmaInput): Promise<{ url: string; pngPath: string; frameId: string }>;
 }
 

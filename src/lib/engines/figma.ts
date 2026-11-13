@@ -3,9 +3,9 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { cutFrameSize, cutLayout } from "../cut";
-import { CANVAS, cardRect, type Format } from "../geometry";
+import { CANVAS, CARD, cardRect, type Format } from "../geometry";
 import { jpegUnder } from "../imaging";
-import type { FigmaInput } from "./types";
+import type { CleanFrameInput, FigmaInput } from "./types";
 
 export function buildFrameScript(o: { name: string; format: Format; cards: { cell: number; label: string }[] }) {
   const { w, h } = CANVAS[o.format];
@@ -28,6 +28,26 @@ for (const c of ${JSON.stringify(cards)}) {
   frame.appendChild(r); r.x = c.x; r.y = c.y; cardIds.push(r.id);
 }
 return { pageId: page.id, frameId: frame.id, bgId: bg.id, cardIds };`;
+}
+
+export function buildCleanFrameScript(o: { name: string; count: number }) {
+  const w = o.count * CARD.w + (o.count - 1) * 64;
+  return `let page = figma.root.children.find((p) => p.name === "Automation");
+if (!page) { page = figma.createPage(); page.name = "Automation"; }
+await figma.setCurrentPageAsync(page);
+const right = page.children.reduce((m, n) => Math.max(m, n.x + n.width), -200) + 200;
+const frame = figma.createFrame();
+frame.name = ${JSON.stringify(`clean_${o.name}`)};
+frame.resize(${w}, ${CARD.h});
+frame.x = right; frame.y = 0;
+frame.fills = [];
+frame.clipsContent = true;
+const cleanIds = [];
+for (let i = 0; i < ${o.count}; i++) {
+  const r = figma.createRectangle(); r.name = "clean" + (i + 1); r.resize(${CARD.w}, ${CARD.h});
+  frame.appendChild(r); r.x = i * ${CARD.w + 64}; r.y = 0; cleanIds.push(r.id);
+}
+return { pageId: page.id, frameId: frame.id, cleanIds };`;
 }
 
 export function extractJson(text: string): any {
@@ -138,6 +158,32 @@ export async function cutToFigma(deps: FigmaDeps, frameId: string, format: Forma
   return String(reply.cutFrameId);
 }
 
+async function postFiles(deps: FigmaDeps, uploads: { submitUrl: string }[], files: { name: string; type: string; buf: Buffer }[]) {
+  for (const [i, f] of files.entries()) {
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(f.buf)], { type: f.type }), f.name);
+    const res = await deps.fetch(uploads[i].submitUrl, { method: "POST", body: form });
+    const body: any = await res.json().catch(() => ({}));
+    if (!body.success) throw new Error(`figma: upload failed: ${body.error ?? res.status}`);
+  }
+}
+
+export async function publishCleanFrame(input: CleanFrameInput, deps: FigmaDeps) {
+  const { fileKey } = deps;
+  const count = input.cleaned.length;
+  const script = buildCleanFrameScript({ name: input.name, count });
+  const reply = await askJson(
+    deps,
+    `Use the Figma MCP tools. 1) Call create_session with fileKey "${fileKey}". 2) Call use_figma with fileKey "${fileKey}" and this code verbatim:\n${script}\n3) Call upload_assets with fileKey "${fileKey}", count ${count}, nodeIds = cleanIds from the result, and currentPageId = pageId from the result. Reply with ONLY JSON: {"frameId":"...","uploads":[{"nodeId":"...","submitUrl":"..."}]} in the same order as nodeIds.`,
+    1,
+  );
+  const uploads: { nodeId: string; submitUrl: string }[] = reply.uploads;
+  if (!Array.isArray(uploads) || uploads.length !== count || !reply.frameId) throw new Error("figma: unexpected upload list");
+  if (new Set(uploads.map((u) => u.nodeId)).size !== count) throw new Error("figma: node IDs mismatch");
+  await postFiles(deps, uploads, input.cleaned.map((buf, k) => ({ name: `clean${k + 1}.png`, type: "image/png", buf })));
+  return { frameId: String(reply.frameId) };
+}
+
 export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
   const { fileKey } = deps;
   const script = buildFrameScript({
@@ -162,13 +208,7 @@ export async function publishToFigma(input: FigmaInput, deps: FigmaDeps) {
     { name: "background.jpg", type: "image/jpeg", buf: await jpegUnder(input.bg) },
     ...input.originals.map((o) => ({ name: `${o.label}.png`, type: "image/png", buf: o.png })),
   ];
-  for (const [i, f] of files.entries()) {
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(f.buf)], { type: f.type }), f.name);
-    const res = await deps.fetch(uploads[i].submitUrl, { method: "POST", body: form });
-    const body: any = await res.json().catch(() => ({}));
-    if (!body.success) throw new Error(`figma: upload failed: ${body.error ?? res.status}`);
-  }
+  await postFiles(deps, uploads, files);
 
   const png = await exportFrame(deps, String(reply.frameId), input.format);
   const pngPath = path.join(input.workDir, `output_${input.name}_${input.format}.png`);

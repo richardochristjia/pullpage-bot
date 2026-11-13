@@ -20,7 +20,8 @@ async function card(name: string) {
 }
 
 function fakes() {
-  const calls = { clean: 0, fill: 0, figma: 0 };
+  const calls = { clean: 0, fill: 0, figma: 0, cleanFrame: 0 }
+  const cleanFrameArgs: Buffer[][] = [];
   const engines: Engines = {
     async clean(i, o) {
       calls.clean++;
@@ -31,6 +32,11 @@ function fakes() {
       const { width, height } = await sharp(i).metadata();
       const { box } = await padTo34(await img(width!, height!, "green"), width!, height!);
       await writeFile(o, await unpadFrom34(await img(896, 1200, "green"), box));
+    },
+    async cleanFrame(i) {
+      calls.cleanFrame++;
+      cleanFrameArgs.push(i.cleaned);
+      return { frameId: "9:9" };
     },
     async figma(inp) {
       calls.figma++;
@@ -44,7 +50,7 @@ function fakes() {
       return { url: `https://figma/${inp.format}`, pngPath, frameId: `1:${calls.figma}` };
     },
   };
-  return { engines, calls };
+  return { engines, calls, cleanFrameArgs };
 }
 
 describe("pipeline", () => {
@@ -66,14 +72,15 @@ describe("pipeline", () => {
 
   it("both formats, 2 cards: clean x2, fill x2, figma x2; canvas size and card pixels exact", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
-    const { engines, calls } = fakes();
+    const { engines, calls, cleanFrameArgs } = fakes();
     const input: RunInput = { cards: [await card("goldeen.png"), await card("b.png")], cells: [4, 5], formats: ["binder", "toploader"], fileKey: "K" };
     const results = await runPipeline("r1", input, engines, () => {}, root);
-    expect(calls).toEqual({ clean: 2, fill: 2, figma: 2 });
+    expect(calls).toEqual({ clean: 2, fill: 2, figma: 2, cleanFrame: 1 });
+    expect(cleanFrameArgs[0]).toHaveLength(2);
     expect(results.map((r) => r.format)).toEqual(["binder", "toploader"]);
     const meta = JSON.parse(await readFile(path.join(root, "output", "r1", "run.json"), "utf8"));
     expect(meta).toMatchObject({
-      id: "r1", name: "goldeen", slug: "goldeen", cells: [4, 5], fileKey: "K",
+      id: "r1", name: "goldeen", slug: "goldeen", cells: [4, 5], fileKey: "K", cleanFrameId: "9:9",
       formats: { binder: { frameId: "1:1" }, toploader: { frameId: "1:2" } },
     });
     for (const f of ["binder", "toploader"] as const) {
@@ -99,6 +106,17 @@ describe("pipeline", () => {
     const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder"] };
     await expect(runPipeline("r2", input, engines, (l, s) => steps.push(`${l}:${s}`), root)).rejects.toThrow("clean card 1:");
     expect(steps).toContain("clean card 1:failed");
+    expect(existsSync(path.join(root, "output"))).toBe(false);
+  });
+
+  it("cleanFrame failure fails the run and leaves output empty", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const { engines } = fakes();
+    engines.cleanFrame = async () => {
+      throw new Error("boom");
+    };
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder"] };
+    await expect(runPipeline("r3", input, engines, () => {}, root)).rejects.toThrow("clean figma: boom");
     expect(existsSync(path.join(root, "output"))).toBe(false);
   });
 });
