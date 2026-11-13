@@ -1,0 +1,1 @@
+- Plan holds. Read page.tsx, listRuns (approve.ts:61), approve route. Current-run results carry no approved flag, so Approve keeps a local done state; past rows use listRuns' approved.
