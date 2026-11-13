@@ -61,7 +61,7 @@ async function editImage(step: string, inPath: string, outPath: string, instruct
   // agy returns 896x1200 whatever it is given, so a bigger input only slows the call.
   await writeFile(path.join(dir, "in.png"), await sharp(buf).resize(896, 1200, { fit: "fill" }).png().toBuffer());
   const prompt =
-    `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. Instruction: ${instruction}`;
+    `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. If the image generation tool fails, stop and reply with the error: never edit or create the image with code, scripts or any other tool. Instruction: ${instruction}`;
   const reply = await runAgy(dir, prompt, undefined, spawn);
   const out = await readOutput(dir);
   if (!out) {
