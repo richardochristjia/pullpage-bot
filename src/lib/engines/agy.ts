@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn, type SpawnOptions } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { padTo34, unpadFrom34 } from "../imaging";
@@ -52,7 +52,27 @@ async function readOutput(dir: string) {
   }
 }
 
-async function editImage(step: string, inPath: string, outPath: string, instruction: string, spawn: SpawnFn) {
+type CheckFn = (pngPath: string) => Promise<string[]>;
+
+// macOS Vision OCR via swift; lines with under 3 letters (star specks, stray digits) are not text.
+export function findText(pngPath: string, spawn: SpawnFn = nodeSpawn): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const script = path.join(process.cwd(), "src/lib/engines/ocr.swift");
+    const child = spawn("swift", [script, pngPath], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (d) => (out += d));
+    child.stderr?.on("data", (d) => (err = (err + d).slice(-500)));
+    child.on("error", reject);
+    child.on("close", (code) =>
+      code === 0
+        ? resolve(out.split("\n").filter((l) => /[A-Za-z]{3,}/.test(l)))
+        : reject(new Error(`ocr exited ${code}: ${err}`)),
+    );
+  });
+}
+
+async function editImage(step: string, inPath: string, outPath: string, instruction: string, spawn: SpawnFn, check: CheckFn) {
   const src = await readFile(inPath);
   const { width, height } = await sharp(src).metadata();
   const { buf, box } = await padTo34(src, width!, height!);
@@ -62,23 +82,35 @@ async function editImage(step: string, inPath: string, outPath: string, instruct
   await writeFile(path.join(dir, "in.png"), await sharp(buf).resize(896, 1200, { fit: "fill" }).png().toBuffer());
   const prompt =
     `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. Generate exactly one image: no retries, variations or extra attempts. If the image generation tool fails, stop and reply with the error: never edit or create the image with code, scripts or any other tool. Instruction: ${instruction}`;
-  const reply = await runAgy(dir, prompt, undefined, spawn);
-  const out = await readOutput(dir);
-  if (!out) {
-    // agy exits 0 with no file when the Pro image quota is used up
-    const quota = /exhausted|quota|RESOURCE_EXHAUSTED|429/i.test(reply);
-    throw new Error(
-      quota
-        ? `${step}: Google AI Pro image quota used up, try again later. agy said: ${reply.trim().slice(-300)}`
-        : `${step}: agy returned no image. agy said: ${reply.trim().slice(-300)}`,
-    );
+  for (let attempt = 1; ; attempt++) {
+    const reply = await runAgy(dir, prompt, undefined, spawn);
+    const out = await readOutput(dir);
+    if (!out) {
+      // agy exits 0 with no file when the Pro image quota is used up
+      const quota = /exhausted|quota|RESOURCE_EXHAUSTED|429/i.test(reply);
+      throw new Error(
+        quota
+          ? `${step}: Google AI Pro image quota used up, try again later. agy said: ${reply.trim().slice(-300)}`
+          : `${step}: agy returned no image. agy said: ${reply.trim().slice(-300)}`,
+      );
+    }
+    // check a temp file so a failing attempt never leaves outPath written
+    const tmp = `${outPath}.check.png`;
+    await writeFile(tmp, await unpadFrom34(out, box));
+    const lines = await check(tmp).catch(async (e) => (await rm(tmp, { force: true }), Promise.reject(e)));
+    if (!lines.length) {
+      await rename(tmp, outPath);
+      return;
+    }
+    await rm(tmp, { force: true });
+    if (attempt === 2) throw new Error(`${step}: text left on image after retry: "${lines[0]}"`);
+    for (const ext of ["png", "jpg", "jpeg", "webp"]) await rm(path.join(dir, `out.${ext}`), { force: true });
   }
-  await writeFile(outPath, await unpadFrom34(out, box));
 }
 
-export function agyEngines(spawn: SpawnFn = nodeSpawn): Pick<Engines, "clean" | "fill"> {
+export function agyEngines(spawn: SpawnFn = nodeSpawn, check: CheckFn = findText): Pick<Engines, "clean" | "fill"> {
   return {
-    clean: (i, o) => editImage("clean", i, o, CLEAN_PROMPT, spawn),
-    fill: (i, o) => editImage("fill", i, o, FILL_PROMPT, spawn),
+    clean: (i, o) => editImage("clean", i, o, CLEAN_PROMPT, spawn, check),
+    fill: (i, o) => editImage("fill", i, o, FILL_PROMPT, spawn, check),
   };
 }

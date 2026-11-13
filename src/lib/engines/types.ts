@@ -15,6 +15,6 @@ export interface Engines {
 }
 
 export const CLEAN_PROMPT =
-  "Remove Text, Border, and everything aside from the art in the middle picture, and extend it but not, move the middle picture position at all. don't forget remove ALL TEXT ELEMENT (NUMERICAL,SYMBOL,ALPHABETICAL)";
+  "Create a new image from in.png using only the illustration inside the card's art window. Extend that illustration outward in every direction so it fills the whole canvas edge to edge, keeping the main subject at the same position and size. The trading card itself must not appear: no border, frame, boxes, icons, and no text, letters or numbers of any kind. The output is a clean, text-free artwork.";
 export const FILL_PROMPT =
-  "fill the white blank space with relevant arts extending from the center image background. Blend everything seamlessly so the whole canvas feels like one complete artwork, with no visible border between the center art and the new background. Do not move, resize or redraw the existing art.";
+  "fill the white blank space with relevant arts extending from the center image background. Blend everything seamlessly so the whole canvas feels like one complete artwork, with no visible border between the center art and the new background. Do not move, resize or redraw the existing art. The new background must contain no text, letters, numbers, symbols, logos or watermarks.";

@@ -54,3 +54,4 @@ Entries are added or amended **only with human approval**.
 - (cut) Toploader cuts keep all nine 900×1200 cells.
 - (output) Approved cuts are persisted as one PDF per format, one 300 dpi page per piece in row-major order, to `pullpage-bot/output/<runId>/`.
 - (output) Each finished run persists its name, card cells and Figma frame IDs to a metadata file in its output folder, so approval survives a restart.
+- (clean) Cleaned cards and generated backgrounds are checked for text by macOS Vision OCR, and a step whose output still has text after one retry fails the run.
