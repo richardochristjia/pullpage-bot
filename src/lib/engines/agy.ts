@@ -13,12 +13,13 @@ export function agyEnv(env: Record<string, string | undefined>) {
   return rest;
 }
 
-export function runAgy(cwd: string, prompt: string, timeoutMs = 300_000, spawn: SpawnFn = nodeSpawn) {
+// Canvas fills ran past 4m40s; agy waits for the turn ("0s") and our timer is the only cap.
+export function runAgy(cwd: string, prompt: string, timeoutMs = 900_000, spawn: SpawnFn = nodeSpawn) {
   return new Promise<void>((resolve, reject) => {
     const opts: SpawnOptions = { cwd, env: agyEnv(process.env) as NodeJS.ProcessEnv, stdio: ["ignore", "pipe", "pipe"] };
     const child = spawn(
       "agy",
-      ["-p", prompt, "--mode", "accept-edits", "--sandbox", "--print-timeout", "280s"],
+      ["-p", prompt, "--mode", "accept-edits", "--sandbox", "--print-timeout", "0s"],
       opts,
     );
     let err = "";
@@ -55,10 +56,11 @@ async function editImage(step: string, inPath: string, outPath: string, instruct
   const { buf, box } = await padTo34(src, width!, height!);
   const dir = `${outPath}.agy`;
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, "in.png"), buf);
+  // agy returns 896x1200 whatever it is given, so a bigger input only slows the call.
+  await writeFile(path.join(dir, "in.png"), await sharp(buf).resize(896, 1200, { fit: "fill" }).png().toBuffer());
   const prompt =
     `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. Instruction: ${instruction}`;
-  await runAgy(dir, prompt, 300_000, spawn);
+  await runAgy(dir, prompt, undefined, spawn);
   const out = await readOutput(dir);
   if (!out) throw new Error(`${step}: agy returned no image`);
   await writeFile(outPath, await unpadFrom34(out, box));
