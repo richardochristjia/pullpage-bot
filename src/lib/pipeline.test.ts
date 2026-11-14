@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
@@ -309,6 +309,21 @@ describe("pipeline", () => {
       expect(f.judged).toContain("clean");
       expect(existsSync(cacheFile(root, c))).toBe(true);
       expect(f.cleanFrameKeys[0]).toEqual([cardKey(c.buf)]);
+    }, 60000);
+
+    it("cache write goes via a pid tmp file and leaves only <key>.png", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const c = await card("a.png");
+      await go(fakes(), [c], root);
+      expect(await readdir(path.join(root, ".cache", "clean"))).toEqual([`${cardKey(c.buf)}.png`]);
+      // a directory squatting on the tmp path makes the tmp write fail: no direct write to .png, run still finishes
+      const root2 = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      await mkdir(path.join(root2, ".cache", "clean", `${cardKey(c.buf)}.${process.pid}.tmp`), { recursive: true });
+      const f = fakes();
+      const { notes } = await go(f, [c], root2);
+      expect(f.calls.clean).toBe(1);
+      expect(notes).toHaveProperty(["clean card 1"]);
+      expect(existsSync(cacheFile(root2, c))).toBe(false);
     }, 60000);
 
     it("needs review (or unchecked): no cache, no key", async () => {
