@@ -25,6 +25,7 @@ function fakes(verdicts: Verdict[] = []) {
   const calls = { clean: 0, fill: 0, figma: 0, cleanFrame: 0 };
   const avoids: (string[] | undefined)[] = [];
   const judged: string[] = [];
+  const judgedFiles: string[][] = [];
   const cleanFrameArgs: Buffer[][] = [];
   const cleanFrameKeys: (string | undefined)[][] = [];
   const find = { calls: 0, result: {} as Record<string, Buffer>, throws: false };
@@ -42,8 +43,9 @@ function fakes(verdicts: Verdict[] = []) {
       const { box } = await padTo34(await img(width!, height!, colour), width!, height!);
       await writeFile(o, await unpadFrom34(await img(896, 1200, colour), box));
     },
-    async judge(kind) {
+    async judge(kind, files) {
       judged.push(kind);
+      judgedFiles.push(files.map((f) => path.basename(f)));
       return verdicts.shift() ?? pass;
     },
     async cleanFrame(i) {
@@ -69,7 +71,7 @@ function fakes(verdicts: Verdict[] = []) {
       return { url: `https://figma/${inp.format}`, pngPath, frameId: `1:${calls.figma}` };
     },
   };
-  return { engines, calls, cleanFrameArgs, cleanFrameKeys, find, avoids, judged };
+  return { engines, calls, cleanFrameArgs, cleanFrameKeys, find, avoids, judged, judgedFiles };
 }
 
 describe("pipeline", () => {
@@ -193,6 +195,15 @@ describe("pipeline", () => {
     expect(judged).toEqual(["clean", "final"]);
     expect(notes["clean card 1 check"]).toBe("pass");
     expect(notes["binder check"]).toBe("pass");
+  });
+
+  it("final judge gets full, raw, then crops; a seam fail retries with avoid and keeps needs review", async () => {
+    const { judgedFiles, calls, avoids, notes } = await run([pass, bad(["hard edge"], ["seam"]), bad(["still"], ["seam"])]);
+    expect(judgedFiles[1]).toEqual(["binder.full.png", "binder.raw.png", "binder.crop1.png"]);
+    expect(judgedFiles[2]).toEqual(["binder.full2.png", "binder.raw2.png", "binder.crop21.png"]);
+    expect(calls.fill).toBe(2);
+    expect(avoids.at(-1)).toEqual(["hard edge"]);
+    expect(notes["binder check"]).toBe("needs review: seam");
   });
 
   it("failing clean retries once with avoid and the retry is passed on", async () => {

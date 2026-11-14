@@ -108,8 +108,8 @@ export function runClaude(prompt: string, timeoutMs = 180_000, spawn: typeof nod
 }
 
 const JUDGE_RULES = {
-  clean: { checks: ["invented", "color", "scale", "smear"], gate: "invented" },
-  final: { checks: ["seam", "scale", "smear"], gate: "scale" },
+  clean: { checks: ["invented", "color", "scale", "smear"], gates: ["invented"] },
+  final: { checks: ["seam", "scale", "smear"], gates: ["seam", "scale"] },
 } as const;
 
 function judgePrompt(kind: "clean" | "final", names: string[]) {
@@ -123,8 +123,8 @@ scale: objects continued from the art window change size or perspective
 smear: any region is smeared, melted, blurry or nonsensical
 ${reply(JUDGE_RULES.clean.checks)}`;
   }
-  return `Read ./${names[0]} (full print insert) and ${names.slice(1).map((n) => `./${n}`).join(" ")} (zoom on each trading card and the background around it). The background was generated to extend the illustration inside the card art window outward. Answer each question with true or false:
-seam: at the edges of the card, the background does not read as a continuation of the art window (colors, lighting, surfaces or lines break)
+  return `Read ./${names[0]} (full print insert), ./${names[1]} (the raw fill: the background alone, no cards) and ${names.slice(2).map((n) => `./${n}`).join(" ")} (zoom on each trading card and the background around it). The background was generated to extend the illustration inside the card art window outward. Answer each question with true or false:
+seam: in the raw fill, the middle rectangle is visible as a separate picture (hard edge, or the colors, lighting, sky or scenery change across its border)
 scale: objects continued from the art window are clearly a different size or perspective outside the card
 smear: any background region is smeared, melted, blurry or nonsensical
 ${reply(JUDGE_RULES.final.checks)}`;
@@ -139,7 +139,7 @@ export async function judge(
   cwd: string,
   claude: JudgeClaude = runClaude,
 ): Promise<Verdict> {
-  const { checks, gate } = JUDGE_RULES[kind];
+  const { checks, gates } = JUDGE_RULES[kind];
   const prompt = judgePrompt(kind, paths.map((p) => path.basename(p)));
   const votes = await Promise.allSettled(
     [0, 1, 2].map(async () => extractJson(await claude(prompt, 120_000, undefined, { model: "sonnet", tools: "Read", cwd }))),
@@ -157,7 +157,7 @@ export async function judge(
         .map((p) => p.trim().slice(0, 200)),
     ),
   ].slice(0, 5);
-  return { fail: flags.includes(gate), flags, problems };
+  return { fail: flags.some((f) => (gates as readonly string[]).includes(f)), flags, problems };
 }
 
 export type FigmaDeps = { claude: (prompt: string) => Promise<string>; fetch: typeof fetch; fileKey: string };
