@@ -37,8 +37,11 @@ export default function RunPage() {
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/runs/${id}`);
-      if (res.ok) return setRun(await res.json());
-      if (res.status !== 404) return;
+      if (res.ok) {
+        const r = await res.json();
+        if (r.formats) return setRun(r);
+        // a run from before this shape lives in memory only until restart; show it like a finished past run
+      } else if (res.status !== 404) return;
       const list: Past[] = await fetch("/api/runs").then((r) => (r.ok ? r.json() : []));
       setLost(list.find((p) => p.id === id) ?? null);
     } catch {

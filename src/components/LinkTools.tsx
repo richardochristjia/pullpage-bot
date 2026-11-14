@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type LineStatus = { url: string; text: string; ok: boolean; pdf?: string };
+type LineStatus = { url: string; text: string; ok: boolean; pdf?: string; wait?: boolean };
 const toLines = (t: string) => [...new Set(t.split("\n").map((s) => s.trim()).filter(Boolean))];
 
 export default function LinkTools() {
@@ -15,8 +15,10 @@ export default function LinkTools() {
   async function runAll(kind: "cut" | "export") {
     const set = kind === "cut" ? setCutStatus : setExportStatus;
     setBusy(kind);
-    set([]);
-    for (const url of toLines(kind === "cut" ? cutText : exportText)) {
+    const urls = toLines(kind === "cut" ? cutText : exportText);
+    set(urls.map((url, i) => ({ url, text: i ? "waiting" : "running", ok: true, wait: true })));
+    for (const [i, url] of urls.entries()) {
+      set((p) => p.map((r, j) => (j === i ? { ...r, text: "running" } : r)));
       let st: LineStatus;
       try {
         const res = await fetch(`/api/links/${kind}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
@@ -31,7 +33,7 @@ export default function LinkTools() {
       } catch (e) {
         st = { url, text: e instanceof Error ? e.message : String(e), ok: false };
       }
-      set((p) => [...p, st]);
+      set((p) => p.map((r, j) => (j === i ? st : r)));
     }
     setBusy("");
   }
@@ -40,7 +42,7 @@ export default function LinkTools() {
     rows.length > 0 && (
       <ul className="line-list">
         {rows.map((r) => (
-          <li key={r.url} className={r.ok ? undefined : "bad"}>
+          <li key={r.url} className={r.ok ? (r.wait ? "muted" : undefined) : "bad"}>
             {r.url.slice(-40)}: {r.text}{" "}
             {r.pdf && <a className="btn" href={r.pdf} download>Download PDF</a>}
           </li>
