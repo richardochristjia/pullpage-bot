@@ -122,3 +122,30 @@ textarea.input { resize: vertical; }
   .runbar { position: sticky; bottom: 0; margin: 0 calc(var(--s-4) * -1); padding: var(--s-3) var(--s-4); background: var(--p-bg); border-top: 1px solid var(--p-line); }
   .runbar .btn { width: 100%; }
 }
+
+/* wizard and finish */
+.phases { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-1); }
+.phases li { display: grid; gap: var(--s-1); padding: var(--s-3); background: var(--p-surface); border-top: 3px solid var(--p-line); }
+.phases .done { border-top-color: var(--p-blue); }
+.phases .live { border-top-color: var(--p-accent); }
+.phases .failed { border-top-color: var(--p-err); }
+.phases .num { font: 500 14px/1 var(--font-mono); }
+.wizard { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--s-5); align-items: start; }
+.log .live-row td { background: var(--p-raise); }
+.log .live-row td:first-child { box-shadow: inset 3px 0 0 var(--p-accent); }
+.log .live-row .st::before { animation: pulse 1.2s ease-in-out infinite; }
+.log .chk { color: var(--p-muted); }
+.log tr:has(.error) td { border-bottom: 0; }
+details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.rail { display: grid; gap: var(--s-3); }
+.rail img, .nopreview { display: block; width: 100%; background: var(--p-surface); }
+.nopreview { padding: var(--s-5) var(--s-3); color: var(--p-muted); font-size: 13px; text-align: center; }
+.banner.ok { border-left-color: var(--p-ok); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
+.steps li { display: grid; justify-items: start; gap: var(--s-2); }
+.finish .run-fmt { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
+.finish .run-fmt img { width: 100%; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (max-width: 1000px) { .wizard { grid-template-columns: minmax(0, 1fr); } .rail { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); } .rail h2, .rail p { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .phases { grid-template-columns: minmax(0, 1fr); } .phases li { grid-template-columns: 1fr auto; } .log .chk { display: none; } .finish .run-fmt { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .log .live-row .st::before { animation: none; } }

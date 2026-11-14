@@ -32,21 +32,31 @@ export default function CutAndPdf({ id, format, cut, approved, onDone }: { id: s
 
   return (
     <div className="pdf-tools">
-      <div className="row">
-      <button className="btn" disabled={!!busy} onClick={() => post("cut")}>
-        {busy === "cut" ? "Cutting…, about 30s" : isCut ? "Re-cut" : "Cut to Figma"}
-      </button>
-      {figmaUrl && (
-        <a className="btn" href={figmaUrl} target="_blank" rel="noreferrer">Open cut in Figma</a>
-      )}
-      <button className="btn btn-primary" disabled={!!busy || !isCut} onClick={() => post("approve")}>
-        {busy === "pdf" ? "Making PDF…, about 30s" : isPdf ? "Re-make PDF" : "Make PDF"}
-      </button>
-      {isPdf && (
-        <a className="btn" href={`/api/runs/${id}/pdf?format=${format}`} download>Download PDF</a>
-      )}
-      </div>
-      <small>Check the pieces in Figma. Edit inside them, don&apos;t move them.</small>
+      <ol className="steps">
+        <li>
+          <span className="label">1 Cut to Figma</span>
+          <button className="btn" disabled={!!busy} onClick={() => post("cut")}>
+            {busy === "cut" ? "Cutting…, about 30s" : isCut ? "Re-cut" : "Cut to Figma"}
+          </button>
+        </li>
+        <li>
+          <span className="label">2 Check in Figma</span>
+          {figmaUrl && <a className="btn" href={figmaUrl} target="_blank" rel="noreferrer">Open cut in Figma</a>}
+          <small>Edit inside the pieces, don&apos;t move them.</small>
+        </li>
+        <li>
+          <span className="label">3 Make PDF</span>
+          <button className="btn btn-primary" disabled={!!busy || !isCut} onClick={() => post("approve")}>
+            {busy === "pdf" ? "Making PDF…, about 30s" : isPdf ? "Re-make PDF" : "Make PDF"}
+          </button>
+        </li>
+        {isPdf && (
+          <li>
+            <span className="label">4 Download PDF</span>
+            <a className="btn" href={`/api/runs/${id}/pdf?format=${format}`} download>Download PDF</a>
+          </li>
+        )}
+      </ol>
       {error && <p className="error" role="alert">{error}</p>}
     </div>
   );
