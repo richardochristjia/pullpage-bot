@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import CutAndPdf from "../components/CutAndPdf";
 
 type Format = "binder" | "toploader";
 type RunView = {
@@ -14,125 +15,6 @@ type Card = { file: File; url: string; cell: number };
 type PastRun = { id: string; name: string; createdAt: string; formats: { format: Format; cut: boolean; approved: boolean }[] };
 
 const DEFAULT_CELLS = [4, 5, 3];
-
-function CutAndPdf({ id, format, cut, approved, onDone }: { id: string; format: Format; cut: boolean; approved: boolean; onDone: () => void }) {
-  const [busy, setBusy] = useState<"" | "cut" | "pdf">("");
-  const [isCut, setIsCut] = useState(cut);
-  const [isPdf, setIsPdf] = useState(approved);
-  const [figmaUrl, setFigmaUrl] = useState("");
-  const [error, setError] = useState("");
-
-  async function post(step: "cut" | "approve") {
-    setBusy(step === "cut" ? "cut" : "pdf");
-    setError("");
-    try {
-      const res = await fetch(`/api/runs/${id}/${step}?format=${format}`, { method: "POST" });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? "Request failed.");
-      if (step === "cut") {
-        setIsCut(true);
-        setIsPdf(false);
-        setFigmaUrl(body.figmaUrl ?? "");
-      } else setIsPdf(true);
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  return (
-    <span>
-      <button disabled={!!busy} onClick={() => post("cut")}>
-        {busy === "cut" ? "Cutting…, about 30s" : isCut ? "Re-cut" : "Cut to Figma"}
-      </button>
-      {figmaUrl && (
-        <>
-          {" "}
-          <a href={figmaUrl} target="_blank" rel="noreferrer">Open cut in Figma</a>
-        </>
-      )}{" "}
-      <button disabled={!!busy || !isCut} onClick={() => post("approve")}>
-        {busy === "pdf" ? "Making PDF…, about 30s" : isPdf ? "Re-make PDF" : "Make PDF"}
-      </button>
-      {isPdf && (
-        <>
-          {" "}
-          <a href={`/api/runs/${id}/pdf?format=${format}`} download>Download PDF</a>
-        </>
-      )}
-      <small style={{ display: "block", opacity: 0.7 }}>Check the pieces in Figma. Edit inside them, don&apos;t move them.</small>
-      {error && <span style={{ color: "#f66" }}> {error}</span>}
-    </span>
-  );
-}
-
-type LineStatus = { url: string; text: string; ok: boolean; pdf?: string };
-const toLines = (t: string) => [...new Set(t.split("\n").map((s) => s.trim()).filter(Boolean))];
-
-function LinkTools() {
-  const [cutText, setCutText] = useState("");
-  const [exportText, setExportText] = useState("");
-  const [cutStatus, setCutStatus] = useState<LineStatus[]>([]);
-  const [exportStatus, setExportStatus] = useState<LineStatus[]>([]);
-  const [busy, setBusy] = useState<"" | "cut" | "export">("");
-
-  async function runAll(kind: "cut" | "export") {
-    const set = kind === "cut" ? setCutStatus : setExportStatus;
-    setBusy(kind);
-    set([]);
-    for (const url of toLines(kind === "cut" ? cutText : exportText)) {
-      let st: LineStatus;
-      try {
-        const res = await fetch(`/api/links/${kind}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error ?? "Request failed.");
-        if (kind === "cut") {
-          st = { url, text: `done · ${body.format}`, ok: true };
-          setExportText((prev) =>
-            toLines(prev).includes(body.cutUrl) ? prev : (prev.trim() ? prev.trimEnd() + "\n" : "") + body.cutUrl,
-          );
-        } else st = { url, text: `done · ${body.format} · ${body.pages} pages`, ok: true, pdf: body.pdf };
-      } catch (e) {
-        st = { url, text: e instanceof Error ? e.message : String(e), ok: false };
-      }
-      set((p) => [...p, st]);
-    }
-    setBusy("");
-  }
-
-  const list = (rows: LineStatus[]) =>
-    rows.length > 0 && (
-      <ul>
-        {rows.map((r) => (
-          <li key={r.url} style={{ color: r.ok ? undefined : "#f66" }}>
-            {r.url.slice(-40)}: {r.text}{" "}
-            {r.pdf && <a href={r.pdf} download>Download PDF</a>}
-          </li>
-        ))}
-      </ul>
-    );
-
-  return (
-    <section>
-      <h2>Links</h2>
-      <h3>Frames to cut</h3>
-      <textarea rows={4} style={{ width: "100%" }} placeholder="One Figma frame link per line" value={cutText} onChange={(e) => setCutText(e.target.value)} />
-      <button disabled={!!busy || !toLines(cutText).length} onClick={() => runAll("cut")}>
-        {busy === "cut" ? "Cutting…, about 30s each" : "Cut"}
-      </button>
-      {list(cutStatus)}
-      <h3>Cut frames to export</h3>
-      <textarea rows={4} style={{ width: "100%" }} placeholder="One cut frame link per line" value={exportText} onChange={(e) => setExportText(e.target.value)} />
-      <button disabled={!!busy || !toLines(exportText).length} onClick={() => runAll("export")}>
-        {busy === "export" ? "Exporting…, about 30s each" : "Export"}
-      </button>
-      <small style={{ display: "block", opacity: 0.7 }}>Check the cut frames in Figma first. Export runs only when you click.</small>
-      {list(exportStatus)}
-    </section>
-  );
-}
 
 export default function Page() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -338,7 +220,6 @@ export default function Page() {
           ))}
         </section>
       )}
-      <LinkTools />
     </main>
   );
 }
