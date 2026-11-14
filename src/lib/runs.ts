@@ -1,5 +1,5 @@
 import { agyEngines } from "./engines/agy";
-import { publishCleanFrame, publishToFigma, runClaude } from "./engines/figma";
+import { judge, publishCleanFrame, publishToFigma, runClaude } from "./engines/figma";
 import type { Engines } from "./engines/types";
 import type { Format } from "./geometry";
 import { runPipeline, type RunInput, type StepStatus } from "./pipeline";
@@ -23,6 +23,7 @@ export const defaultFigmaDeps = (fileKey: string) => ({ claude: (p: string) => r
 
 export const defaultEngines = (fileKey: string): Engines => ({
   ...agyEngines(),
+  judge: (k, p, cwd) => judge(k, p, cwd),
   cleanFrame: (i) => publishCleanFrame(i, defaultFigmaDeps(fileKey)),
   figma: (i) => publishToFigma(i, defaultFigmaDeps(fileKey)),
 });

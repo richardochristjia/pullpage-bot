@@ -48,3 +48,41 @@ export async function jpegUnder(buf: Buffer, maxBytes = 9.5 * 1024 * 1024) {
   }
   throw new Error("background too large for Figma upload");
 }
+
+const GAP = 32;
+const MARGIN = 300;
+const FULL_MAX = 1200;
+
+// Original card (left) and cleaned card (right) in one PNG for the clean judge.
+export async function cleanPair(orig: Buffer, clean: Buffer) {
+  const fit = (b: Buffer) => sharp(b).resize(CARD.w, CARD.h, { fit: "fill" }).png().toBuffer();
+  return sharp({ create: { width: CARD.w * 2 + GAP, height: CARD.h, channels: 3, background: WHITE } })
+    .composite([
+      { input: await fit(orig), left: 0, top: 0 },
+      { input: await fit(clean), left: CARD.w + GAP, top: 0 },
+    ])
+    .png()
+    .toBuffer();
+}
+
+// Background with the original cards placed on it: a shrunk full frame plus one crop per card with a margin.
+export async function finalPreviews(format: Format, bg: Buffer, cards: { cell: number; png: Buffer }[]) {
+  const placed = await sharp(bg)
+    .composite(cards.map(({ cell, png }) => ({ input: png, left: cardRect(format, cell).x, top: cardRect(format, cell).y })))
+    .png()
+    .toBuffer();
+  const { width, height } = await sharp(placed).metadata();
+  const full = await sharp(placed).resize(FULL_MAX, FULL_MAX, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
+  const crops = await Promise.all(
+    cards.map(({ cell }) => {
+      const r = cardRect(format, cell);
+      const left = Math.max(0, r.x - MARGIN);
+      const top = Math.max(0, r.y - MARGIN);
+      return sharp(placed)
+        .extract({ left, top, width: Math.min(width!, r.x + r.w + MARGIN) - left, height: Math.min(height!, r.y + r.h + MARGIN) - top })
+        .png()
+        .toBuffer();
+    }),
+  );
+  return { full, crops };
+}
