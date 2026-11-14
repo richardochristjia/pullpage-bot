@@ -270,12 +270,14 @@ describe("figma", () => {
       expect(v).toMatchObject({ fail: false, flags: ["color"] });
     });
 
-    it("final: only scale gates; unparseable and throwing votes count as no flags", async () => {
+    it("final: seam and scale gate; unparseable and throwing votes count as no flags", async () => {
       const claude = seq(vote({ seam: true, scale: true }), async () => "no json", vote({ seam: true, scale: true }));
       const v = await judge("final", ["/w/f.png", "/w/c1.png"], "/w", claude as any);
       expect(v).toMatchObject({ fail: true, flags: ["seam", "scale"] });
       const seamOnly = await judge("final", ["/w/f.png"], "/w", seq(vote({ seam: true }), vote({ seam: true }), bad) as any);
-      expect(seamOnly).toMatchObject({ fail: false, flags: ["seam"] });
+      expect(seamOnly).toMatchObject({ fail: true, flags: ["seam"] });
+      const smearOnly = await judge("final", ["/w/f.png"], "/w", seq(vote({ smear: true }), vote({ smear: true }), bad) as any);
+      expect(smearOnly).toMatchObject({ fail: false, flags: ["smear"] });
     });
 
     it("all votes failing is skipped, a pass", async () => {
@@ -286,11 +288,12 @@ describe("figma", () => {
     it("asks sonnet with Read in the work dir, naming the files", async () => {
       const seen: any[] = [];
       const claude = async (p: string, t: number, _s: undefined, o: any) => (seen.push({ p, t, o }), "{}");
-      await judge("final", ["/w/f.png", "/w/c1.png", "/w/c2.png"], "/w", claude as any);
+      await judge("final", ["/w/f.png", "/w/r.png", "/w/c1.png", "/w/c2.png"], "/w", claude as any);
       expect(seen).toHaveLength(3);
       expect(seen[0].o).toEqual({ model: "sonnet", tools: "Read", cwd: "/w" });
       expect(seen[0].t).toBe(120_000);
-      expect(seen[0].p).toContain("Read ./f.png (full print insert) and ./c1.png ./c2.png (zoom");
+      expect(seen[0].p).toContain("Read ./f.png (full print insert), ./r.png (the raw fill: the background alone, no cards) and ./c1.png ./c2.png (zoom");
+      expect(seen[0].p).toContain("seam: in the raw fill, the middle rectangle is visible as a separate picture");
     });
   });
 

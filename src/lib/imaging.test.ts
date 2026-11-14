@@ -75,6 +75,8 @@ describe("imaging", () => {
     const size = async (b: Buffer) => { const m = await sharp(b).metadata(); return [m.width, m.height]; };
     const mid = await finalPreviews("binder", await solid(2252, 3152), [{ cell: 4, png: card }, { cell: 0, png: card }]);
     expect(await size(mid.full)).toEqual([857, 1200]);
+    expect(await size(mid.raw)).toEqual([857, 1200]);
+    expect((await sharp(mid.raw).stats()).channels[0].mean).toBeCloseTo(200, 0); // no card pixels
     expect(await size(mid.crops[0])).toEqual([1350, 1650]); // 750+600 x 1050+600
     expect(await size(mid.crops[1])).toEqual([1050, 1350]); // top-left card: margin clamped at 0
     const tl = await finalPreviews("toploader", await solid(2702, 3602), [{ cell: 8, png: card }]);

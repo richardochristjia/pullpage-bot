@@ -208,9 +208,9 @@ export async function runPipeline(
       `${format} check`,
       firstBg,
       async (buf, tag) => {
-        const { full, crops } = await finalPreviews(format, buf, originals.map((png, k) => ({ cell: input.cells[k], png })));
-        const files = [`${format}.full${tag}.png`, ...crops.map((_, i) => `${format}.crop${tag}${i + 1}.png`)].map((f) => path.join(work, f));
-        await Promise.all([full, ...crops].map((b, i) => writeFile(files[i], b)));
+        const { full, raw, crops } = await finalPreviews(format, buf, originals.map((png, k) => ({ cell: input.cells[k], png })));
+        const files = [`${format}.full${tag}.png`, `${format}.raw${tag}.png`, ...crops.map((_, i) => `${format}.crop${tag}${i + 1}.png`)].map((f) => path.join(work, f));
+        await Promise.all([full, raw, ...crops].map((b, i) => writeFile(files[i], b)));
         return engines.judge("final", files, work);
       },
       async (avoid) => {

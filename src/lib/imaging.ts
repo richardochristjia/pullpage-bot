@@ -65,7 +65,7 @@ export async function cleanPair(orig: Buffer, clean: Buffer) {
     .toBuffer();
 }
 
-// Background with the original cards placed on it: a shrunk full frame plus one crop per card with a margin.
+// Background with the original cards placed on it: a shrunk full frame, the shrunk background alone, and one crop per card with a margin.
 export async function finalPreviews(format: Format, bg: Buffer, cards: { cell: number; png: Buffer }[]) {
   const placed = await sharp(bg)
     .composite(cards.map(({ cell, png }) => ({ input: png, left: cardRect(format, cell).x, top: cardRect(format, cell).y })))
@@ -73,6 +73,7 @@ export async function finalPreviews(format: Format, bg: Buffer, cards: { cell: n
     .toBuffer();
   const { width, height } = await sharp(placed).metadata();
   const full = await sharp(placed).resize(FULL_MAX, FULL_MAX, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
+  const raw = await sharp(bg).resize(FULL_MAX, FULL_MAX, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
   const crops = await Promise.all(
     cards.map(({ cell }) => {
       const r = cardRect(format, cell);
@@ -84,5 +85,5 @@ export async function finalPreviews(format: Format, bg: Buffer, cards: { cell: n
         .toBuffer();
     }),
   );
-  return { full, crops };
+  return { full, raw, crops };
 }

@@ -65,7 +65,7 @@ Entries are added or amended **only with human approval**.
 - (output) Link exports persist one PDF per cut frame to `pullpage-bot/output/links/`.
 - (clean) Card cleaning instructs agy to extend only the art window, keeping its colors, lighting, weather, time of day and object scale, with no new scenery.
 - (clean) Each cleaned card is checked by a majority of three headless Claude votes for invented scenery, and a failing clean is regenerated once with the judge's problems in the prompt.
-- (background) Each generated background is checked, with the original cards placed on it, by a majority of three headless Claude votes for scale breaks at the card edge, and a failing background is regenerated once with the judge's problems in the prompt.
+- (background) Each generated background is checked by a majority of three headless Claude votes for a visible seam around the center art on the raw fill and for scale breaks at the card edge with the original cards placed on it, and a background that fails either is regenerated once with the judge's problems in the prompt.
 - (pipeline) When a checked step still fails after its retry, the attempt with fewer flags is kept and the run finishes with that step marked as needing review.
 - (background) A run can carry one optional extra prompt and one optional reference image, which every background fill in that run passes to agy after the fixed fill rules.
 - (background) The background reference image is pasted or dropped into the run form, with no file picker.

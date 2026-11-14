@@ -1,0 +1,1 @@
+- False seam flags on good backgrounds are untested (manual check 8). Check: run a card whose background blends well; if its check fails, soften the seam wording in src/lib/engines/figma.ts.
