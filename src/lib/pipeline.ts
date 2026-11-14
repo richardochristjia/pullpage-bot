@@ -15,7 +15,8 @@ export type RunInput = {
   bgRef?: { name: string; type: string; buf: Buffer };
 };
 export type StepStatus = "pending" | "running" | "done" | "failed";
-export type OnStep = (label: string, status: StepStatus, error?: string) => void; // error doubles as a note on done steps
+export type OnStep = (label: string, status: StepStatus, error?: string, image?: string) => void; // error doubles as a note on done steps; image names a .work file
+export { planSteps } from "./steps";
 
 const TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -66,11 +67,11 @@ export async function runPipeline(
   const name = runName(input);
   const work = path.join(root, ".work", id);
   await mkdir(work, { recursive: true });
-  const step = async <T>(label: string, fn: () => Promise<T>) => {
+  const step = async <T>(label: string, fn: () => Promise<T>, image?: string) => {
     onStep(label, "running");
     try {
       const r = await fn();
-      onStep(label, "done");
+      onStep(label, "done", undefined, image);
       return r;
     } catch (e) {
       const msg = `${label}: ${(e as Error).message}`;
@@ -85,25 +86,26 @@ export async function runPipeline(
     first: Buffer,
     judgeIt: (buf: Buffer, tag: string) => Promise<Verdict>,
     retry: (avoid: string[]) => Promise<Buffer>,
+    files: [string, string],
   ) => {
     onStep(label, "running");
     const note = (v: Verdict, retried: boolean) =>
       v.skipped ? `skipped: ${v.skipped}` : v.fail ? `needs review: ${v.flags.join(", ")}` : retried ? "pass after retry" : "pass";
     const v1 = await judgeIt(first, "");
     if (!v1.fail) {
-      onStep(label, "done", note(v1, false));
+      onStep(label, "done", note(v1, false), files[0]);
       return first;
     }
     let second: Buffer;
     try {
       second = await retry(v1.problems);
     } catch (e) {
-      onStep(label, "done", `${note(v1, false)} (retry failed: ${(e as Error).message})`);
+      onStep(label, "done", `${note(v1, false)} (retry failed: ${(e as Error).message})`, files[0]);
       return first;
     }
     const v2 = await judgeIt(second, "2");
     const keepRetry = v2.flags.length <= v1.flags.length;
-    onStep(label, "done", note(keepRetry ? v2 : v1, true));
+    onStep(label, "done", note(keepRetry ? v2 : v1, true), files[keepRetry ? 1 : 0]);
     return keepRetry ? second : first;
   };
 
@@ -121,7 +123,7 @@ export async function runPipeline(
       await writeFile(inp, orig);
       await engines.clean(inp, out);
       return readFile(out);
-    });
+    }, `card${k}.clean.png`);
     cleaned.push(
       await check(
         `clean card ${k + 1} check`,
@@ -136,14 +138,17 @@ export async function runPipeline(
           await engines.clean(inp, out2, avoid);
           return readFile(out2);
         },
+        [`card${k}.clean.png`, `card${k}.clean2.png`],
       ),
     );
   }
 
   const results: { format: Format; figmaUrl: string; pngPath: string; frameId: string }[] = [];
   for (const format of input.formats) {
-    const canvas = await step(`${format} canvas`, () =>
-      composeCanvas(format, cleaned.map((png, k) => ({ cell: input.cells[k], png }))),
+    const canvas = await step(
+      `${format} canvas`,
+      () => composeCanvas(format, cleaned.map((png, k) => ({ cell: input.cells[k], png }))),
+      `${format}.canvas.png`,
     );
     const inp = path.join(work, `${format}.canvas.png`);
     const firstBg = await step(`${format} background`, async () => {
@@ -151,7 +156,7 @@ export async function runPipeline(
       const out = path.join(work, `${format}.bg.png`);
       await engines.fill(inp, out, undefined, extra);
       return readFile(out);
-    });
+    }, `${format}.bg.png`);
     const bg = await check(
       `${format} check`,
       firstBg,
@@ -166,6 +171,7 @@ export async function runPipeline(
         await engines.fill(inp, out2, avoid, extra);
         return readFile(out2);
       },
+      [`${format}.bg.png`, `${format}.bg2.png`],
     );
     const r = await step(`${format} figma`, () =>
       engines.figma({
