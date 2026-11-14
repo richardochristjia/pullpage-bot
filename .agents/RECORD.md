@@ -69,3 +69,8 @@ Entries are added or amended **only with human approval**.
 - (pipeline) When a checked step still fails after its retry, the attempt with fewer flags is kept and the run finishes with that step marked as needing review.
 - (background) A run can carry one optional extra prompt and one optional reference image, which every background fill in that run passes to agy after the fixed fill rules.
 - (background) The background reference image is pasted or dropped into the run form, with no file picker.
+- (ui) The run form places cards by dropping or dragging them onto a 3×3 sheet, where dropping on an occupied cell swaps the two cards.
+- (ui) Each run has its own page at /runs/<runId>, which survives a page reload while the server keeps the run in memory.
+- (pipeline) A run lists every planned step as pending when it starts, and each step records its start and end time.
+- (api) Intermediate run images are served read-only from .work/<runId>/ for a fixed allow-list of file names.
+- (ui) Past runs are listed at /library and the link cut and export tools sit at /links.
