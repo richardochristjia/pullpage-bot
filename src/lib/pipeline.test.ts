@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { CANVAS, cardRect } from "./geometry";
 import { padTo34, toCard, unpadFrom34 } from "./imaging";
-import { displayName, runPipeline, validateRun, type RunInput } from "./pipeline";
+import { displayName, planSteps, runPipeline, validateRun, type RunInput } from "./pipeline";
 import type { Engines, Verdict } from "./engines/types";
 
 const img = (w: number, h: number, c: string) =>
@@ -219,4 +219,29 @@ describe("pipeline", () => {
     expect(calls.clean).toBe(1);
     expect(notes["clean card 1 check"]).toBe("skipped: claude exited 1");
   });
+
+  it("planSteps equals the emitted labels", async () => {
+    const bgRef = { name: "r.png", type: "image/png", buf: await img(10, 10, "purple") };
+    const inputs: RunInput[] = [
+      { cards: [await card("a.png")], cells: [4], formats: ["binder", "toploader"], bgRef },
+      { cards: [await card("a.png"), await card("b.png"), await card("c.png")], cells: [4, 5, 3], formats: ["binder"] },
+    ];
+    for (const input of inputs) {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const seen: string[] = [];
+      await runPipeline("rp", input, fakes().engines, (l) => !seen.includes(l) && seen.push(l), root);
+      expect(seen).toEqual(planSteps(input));
+    }
+  }, 60000);
+
+  it("step images: kept retry names the second file, pass names the first", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const images: Record<string, string | undefined> = {};
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder"] };
+    await runPipeline("ri", input, fakes([bad(["rain"], ["x"]), pass, pass]).engines, (l, s, _e, img) => s === "done" && (images[l] = img), root);
+    expect(images["clean card 1"]).toBe("card0.clean.png");
+    expect(images["clean card 1 check"]).toBe("card0.clean2.png");
+    expect(images["binder canvas"]).toBe("binder.canvas.png");
+    expect(images["binder check"]).toBe("binder.bg.png");
+  }, 60000);
 });

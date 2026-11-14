@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { listRuns } from "@/lib/approve";
 import { validateRun, type RunInput } from "@/lib/pipeline";
-import { defaultEngines, isBusy, startRun } from "@/lib/runs";
+import { activeRunId, defaultEngines, isBusy, startRun } from "@/lib/runs";
 
 export const runtime = "nodejs";
 
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   }
   const errors = validateRun(input);
   if (errors.length) return NextResponse.json({ errors }, { status: 400 });
-  if (isBusy()) return NextResponse.json({ errors: ["A run is already active."] }, { status: 409 });
+  if (isBusy()) return NextResponse.json({ errors: ["A run is already active."], activeId: activeRunId() }, { status: 409 });
   const id = startRun(input, defaultEngines(process.env.FIGMA_FILE_KEY!));
   return NextResponse.json({ id }, { status: 202 });
 }
