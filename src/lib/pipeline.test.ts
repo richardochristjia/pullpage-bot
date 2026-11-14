@@ -106,6 +106,17 @@ describe("pipeline", () => {
     for (const e of extras) expect(e).toEqual({ prompt: "stars", ref });
   }, 60000);
 
+  it("a corrupt reference fails a reference step before any clean call", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const { engines, calls } = fakes();
+    const steps: [string, string][] = [];
+    const bgRef = { name: "r.png", type: "image/png", buf: Buffer.from("not an image") };
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder"], bgRef };
+    await expect(runPipeline("rc", input, engines, (l, s) => steps.push([l, s]), root)).rejects.toThrow(/^reference:/);
+    expect(steps).toContainEqual(["reference", "failed"]);
+    expect(calls.clean).toBe(0);
+  }, 60000);
+
   it("both formats, 2 cards: clean x2, fill x2, figma x2; canvas size and card pixels exact", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
     const { engines, calls, cleanFrameArgs } = fakes();
