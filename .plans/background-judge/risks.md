@@ -1,3 +1,4 @@
 - Judge prompts, the 2-of-3 gate and `claude -p --model sonnet --allowedTools Read` reading PNGs from the work dir were only tested with fakes (src/lib/engines/figma.ts judge). Check: run one real clean and fill and read the check step notes.
 - If the retry agy call itself fails (quota, no image), the first attempt is kept and the note gets "(retry failed: ...)" instead of failing the run (src/lib/pipeline.ts check). Check: exhaust agy quota mid-run and confirm the run finishes.
 - Crop PNGs for a toploader with three cards can be large; Sonnet Read may downscale them (src/lib/imaging.ts finalPreviews). Check: a 3-card run, judge latency.
+- keepRetry (pipeline.ts:97): skipped retry can replace a judged failing first attempt; flag count includes non-gate flags. Left open, see falsify.md.

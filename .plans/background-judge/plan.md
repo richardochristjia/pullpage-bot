@@ -55,3 +55,7 @@ Final: `Read ./{full} (full print insert) and ./{crop…} (zoom on each trading 
 - `src/lib/imaging.test.ts` — `cleanPair` size, `finalPreviews` sizes and crop bounds.
 - `src/lib/pipeline.test.ts` — fakes get a scripted `judge`; cases: pass first try, fail→pass, fail twice keeps fewer flags, judge skipped.
 - Run: `npm test && npm run lint && npm run build`.
+
+## Divergences
+- If the retry agy call throws, the run keeps the first attempt and the check note adds `(retry failed: …)` instead of failing the run (closest to "judge never fails the run").
+- falsify: keep-retry findings ruled leave open / your call; no code changed.
