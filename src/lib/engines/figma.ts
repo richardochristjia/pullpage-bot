@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { cutFrameSize, cutLayout } from "../cut";
 import { CANVAS, CARD, FORMATS, cardRect, type Format } from "../geometry";
 import { jpegUnder } from "../imaging";
-import type { CleanFrameInput, FigmaInput } from "./types";
+import type { CleanFrameInput, FigmaInput, Verdict } from "./types";
 
 export function buildFrameScript(o: { name: string; format: Format; cards: { cell: number; label: string }[] }) {
   const { w, h } = CANVAS[o.format];
@@ -61,12 +61,14 @@ const TOOLS = ["create_session", "use_figma", "upload_assets", "download_assets"
   .map((t) => `mcp__plugin_figma_figma__${t}`)
   .join(",");
 
-export function runClaude(prompt: string, timeoutMs = 180_000, spawn: typeof nodeSpawn = nodeSpawn) {
+export type ClaudeOpts = { model?: string; tools?: string; cwd?: string };
+
+export function runClaude(prompt: string, timeoutMs = 180_000, spawn: typeof nodeSpawn = nodeSpawn, o: ClaudeOpts = {}) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(
       "claude",
-      ["-p", prompt, "--model", "haiku", "--allowedTools", TOOLS, "--output-format", "json"],
-      { stdio: ["ignore", "pipe", "pipe"] },
+      ["-p", prompt, "--model", o.model ?? "haiku", "--allowedTools", o.tools ?? TOOLS, "--output-format", "json"],
+      { stdio: ["ignore", "pipe", "pipe"], ...(o.cwd ? { cwd: o.cwd } : {}) },
     );
     let out = "";
     let err = "";
@@ -90,6 +92,59 @@ export function runClaude(prompt: string, timeoutMs = 180_000, spawn: typeof nod
       }
     });
   });
+}
+
+const JUDGE_RULES = {
+  clean: { checks: ["invented", "color", "scale", "smear"], gate: "invented" },
+  final: { checks: ["seam", "scale", "smear"], gate: "scale" },
+} as const;
+
+function judgePrompt(kind: "clean" | "final", names: string[]) {
+  const reply = (cs: readonly string[]) =>
+    `Reply with only JSON: {${cs.map((c) => `"${c}": bool`).join(", ")}, "problems": ["..."]}.`;
+  if (kind === "clean") {
+    return `Read ./${names[0]}. Left: a trading card. Right: an image generated to extend ONLY the illustration in the card art window outward to fill the canvas. Look first at what the art window itself shows, then at what the right image adds outside that area. Answer each question with true or false:
+invented: the added area shows scenery the art window does not (new sky, buildings, weather, night, landscape)
+color: the added area clearly shifts color, brightness or lighting from the art window
+scale: objects continued from the art window change size or perspective
+smear: any region is smeared, melted, blurry or nonsensical
+${reply(JUDGE_RULES.clean.checks)}`;
+  }
+  return `Read ./${names[0]} (full print insert) and ${names.slice(1).map((n) => `./${n}`).join(" ")} (zoom on each trading card and the background around it). The background was generated to extend the illustration inside the card art window outward. Answer each question with true or false:
+seam: at the edges of the card, the background does not read as a continuation of the art window (colors, lighting, surfaces or lines break)
+scale: objects continued from the art window are clearly a different size or perspective outside the card
+smear: any background region is smeared, melted, blurry or nonsensical
+${reply(JUDGE_RULES.final.checks)}`;
+}
+
+type JudgeClaude = (prompt: string, timeoutMs: number, spawn: undefined, o: ClaudeOpts) => Promise<string>;
+
+// Three parallel votes, majority (2 of 3) per check. A vote that throws or can't be parsed counts as nothing.
+export async function judge(
+  kind: "clean" | "final",
+  paths: string[],
+  cwd: string,
+  claude: JudgeClaude = runClaude,
+): Promise<Verdict> {
+  const { checks, gate } = JUDGE_RULES[kind];
+  const prompt = judgePrompt(kind, paths.map((p) => path.basename(p)));
+  const votes = await Promise.allSettled(
+    [0, 1, 2].map(async () => extractJson(await claude(prompt, 120_000, undefined, { model: "sonnet", tools: "Read", cwd }))),
+  );
+  const ok = votes.flatMap((v) => (v.status === "fulfilled" && v.value ? [v.value] : []));
+  if (!ok.length) {
+    const last = [...votes].reverse().find((v) => v.status === "rejected") as PromiseRejectedResult | undefined;
+    return { fail: false, flags: [], problems: [], skipped: String(last?.reason?.message ?? last?.reason ?? "no verdict") };
+  }
+  const flags = checks.filter((c) => ok.filter((v) => v[c] === true).length >= 2);
+  const problems = [
+    ...new Set(
+      ok.flatMap((v) => (Array.isArray(v.problems) ? v.problems : []))
+        .filter((p): p is string => typeof p === "string" && !!p.trim())
+        .map((p) => p.trim().slice(0, 200)),
+    ),
+  ].slice(0, 5);
+  return { fail: flags.includes(gate), flags, problems };
 }
 
 export type FigmaDeps = { claude: (prompt: string) => Promise<string>; fetch: typeof fetch; fileKey: string };

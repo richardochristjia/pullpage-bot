@@ -1,8 +1,8 @@
 import { cp, mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { FORMATS, type Format } from "./geometry";
-import { composeCanvas, toCard } from "./imaging";
-import type { Engines } from "./engines/types";
+import { cleanPair, composeCanvas, finalPreviews, toCard } from "./imaging";
+import type { Engines, Verdict } from "./engines/types";
 
 export type RunInput = {
   cards: { name: string; type: string; buf: Buffer }[];
@@ -12,7 +12,7 @@ export type RunInput = {
   fileKey?: string;
 };
 export type StepStatus = "pending" | "running" | "done" | "failed";
-export type OnStep = (label: string, status: StepStatus, error?: string) => void;
+export type OnStep = (label: string, status: StepStatus, error?: string) => void; // error doubles as a note on done steps
 
 const TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -71,17 +71,59 @@ export async function runPipeline(
     }
   };
 
+  // Judge an attempt; on a fail regenerate once with the judge's problems and keep the one with fewer flags (tie: the retry).
+  const check = async (
+    label: string,
+    first: Buffer,
+    judgeIt: (buf: Buffer, tag: string) => Promise<Verdict>,
+    retry: (avoid: string[]) => Promise<Buffer>,
+  ) => {
+    onStep(label, "running");
+    const note = (v: Verdict, retried: boolean) =>
+      v.skipped ? `skipped: ${v.skipped}` : v.fail ? `needs review: ${v.flags.join(", ")}` : retried ? "pass after retry" : "pass";
+    const v1 = await judgeIt(first, "");
+    if (!v1.fail) {
+      onStep(label, "done", note(v1, false));
+      return first;
+    }
+    let second: Buffer;
+    try {
+      second = await retry(v1.problems);
+    } catch (e) {
+      onStep(label, "done", `${note(v1, false)} (retry failed: ${(e as Error).message})`);
+      return first;
+    }
+    const v2 = await judgeIt(second, "2");
+    const keepRetry = v2.flags.length <= v1.flags.length;
+    onStep(label, "done", note(keepRetry ? v2 : v1, true));
+    return keepRetry ? second : first;
+  };
+
   const originals = await step("resize", () => Promise.all(input.cards.map((c) => toCard(c.buf))));
   const cleaned: Buffer[] = [];
   for (const [k, orig] of originals.entries()) {
+    const inp = path.join(work, `card${k}.png`);
+    const out = path.join(work, `card${k}.clean.png`);
+    const first = await step(`clean card ${k + 1}`, async () => {
+      await writeFile(inp, orig);
+      await engines.clean(inp, out);
+      return readFile(out);
+    });
     cleaned.push(
-      await step(`clean card ${k + 1}`, async () => {
-        const inp = path.join(work, `card${k}.png`);
-        const out = path.join(work, `card${k}.clean.png`);
-        await writeFile(inp, orig);
-        await engines.clean(inp, out);
-        return readFile(out);
-      }),
+      await check(
+        `clean card ${k + 1} check`,
+        first,
+        async (buf, tag) => {
+          const pair = path.join(work, `card${k}.pair${tag}.png`);
+          await writeFile(pair, await cleanPair(orig, buf));
+          return engines.judge("clean", [pair], work);
+        },
+        async (avoid) => {
+          const out2 = path.join(work, `card${k}.clean2.png`);
+          await engines.clean(inp, out2, avoid);
+          return readFile(out2);
+        },
+      ),
     );
   }
 
@@ -90,13 +132,28 @@ export async function runPipeline(
     const canvas = await step(`${format} canvas`, () =>
       composeCanvas(format, cleaned.map((png, k) => ({ cell: input.cells[k], png }))),
     );
-    const bg = await step(`${format} background`, async () => {
-      const inp = path.join(work, `${format}.canvas.png`);
-      const out = path.join(work, `${format}.bg.png`);
+    const inp = path.join(work, `${format}.canvas.png`);
+    const firstBg = await step(`${format} background`, async () => {
       await writeFile(inp, canvas);
+      const out = path.join(work, `${format}.bg.png`);
       await engines.fill(inp, out);
       return readFile(out);
     });
+    const bg = await check(
+      `${format} check`,
+      firstBg,
+      async (buf, tag) => {
+        const { full, crops } = await finalPreviews(format, buf, originals.map((png, k) => ({ cell: input.cells[k], png })));
+        const files = [`${format}.full${tag}.png`, ...crops.map((_, i) => `${format}.crop${tag}${i + 1}.png`)].map((f) => path.join(work, f));
+        await Promise.all([full, ...crops].map((b, i) => writeFile(files[i], b)));
+        return engines.judge("final", files, work);
+      },
+      async (avoid) => {
+        const out2 = path.join(work, `${format}.bg2.png`);
+        await engines.fill(inp, out2, avoid);
+        return readFile(out2);
+      },
+    );
     const r = await step(`${format} figma`, () =>
       engines.figma({
         format,

@@ -98,9 +98,8 @@ describe("agy", () => {
   const exists = (p: string) => readFile(p).then(() => true, () => false);
 
   it("prompts match the spec", () => {
-    expect(CLEAN_PROMPT).toBe(
-      "Create a new image from in.png using only the illustration inside the card's art window. Extend that illustration outward in every direction so it fills the whole canvas edge to edge, keeping the main subject at the same position and size. The trading card itself must not appear: no border, frame, boxes, icons, and no text, letters or numbers of any kind. The output is a clean, text-free artwork.",
-    );
+    expect(CLEAN_PROMPT).toContain("keep the art window's exact color palette, brightness, lighting, weather and time of day");
+    expect(CLEAN_PROMPT).toContain("Do not add rain, fog, night, buildings or any scenery that the art window does not already show.");
     expect(FILL_PROMPT.endsWith(" The new background must contain no text, letters, numbers, symbols, logos or watermarks.")).toBe(true);
   });
 
@@ -110,6 +109,16 @@ describe("agy", () => {
     await agyEngines(spawn, check).clean(inp, outp);
     expect(calls).toHaveLength(1);
     expect(await exists(outp)).toBe(true);
+  });
+
+  it("clean prompt reaches agy; Avoid appended only when given", async () => {
+    const { inp, outp, spawn, calls, scripted } = await setup();
+    const { check } = scripted([], []);
+    await agyEngines(spawn, check).clean(inp, outp);
+    await agyEngines(spawn, check).clean(inp, outp, ["rain on the left", "night sky"]);
+    expect(calls[0].args[1]).toContain(CLEAN_PROMPT);
+    expect(calls[0].args[1]).not.toContain("Avoid:");
+    expect(calls[1].args[1]).toContain(`${CLEAN_PROMPT} Avoid: rain on the left; night sky.`);
   });
 
   it("text then clean: two agy calls, file written", async () => {

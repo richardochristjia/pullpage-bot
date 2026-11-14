@@ -26,6 +26,7 @@ Paste Figma frame links (one per line, from the configured `FIGMA_FILE_KEY` file
 ## Run time and limits
 
 - About 6 to 10 minutes per card set; each `agy` call takes 2 to 4 minutes. A run needs one call per card plus one per format.
+- Each cleaned card and each background is checked by three headless Claude votes (about 10 to 15 seconds each check); a failed check costs one more `agy` call.
 - One run at a time; run progress is kept in memory and lost on restart, but each finished run keeps a `run.json` in its output folder.
 - `agy` returns 896x1200 images, so the background is upscaled and is softer than the cards, which are placed at native size.
 - Works only on a Mac with `agy`, Claude Code and Figma logged in.

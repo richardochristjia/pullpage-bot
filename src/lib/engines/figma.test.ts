@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -5,7 +6,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { cardRect } from "../geometry";
 import { cutLayout } from "../cut";
-import { buildCleanFrameScript, buildCutScript, buildLinkCutScript, cutLinkInFigma, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, publishCleanFrame, publishToFigma } from "./figma";
+import { buildCleanFrameScript, buildCutScript, buildLinkCutScript, cutLinkInFigma, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, judge, runClaude, publishCleanFrame, publishToFigma } from "./figma";
 
 describe("figma", () => {
   it("script has size, page, rects, background before cards", () => {
@@ -222,5 +223,75 @@ describe("figma", () => {
     const bad = async () => (m++, '{"cutFrameId":"5:5","format":"poster"}');
     await expect(cutLinkInFigma({ claude: bad, fetch, fileKey: "K" }, "1:2")).rejects.toThrow();
     expect(m).toBe(1);
+  });
+
+  describe("judge", () => {
+    const vote = (o: object) => async () => JSON.stringify(o);
+    const seq = (...fns: (() => Promise<string>)[]) => async () => fns.shift()!();
+    const bad = async () => {
+      throw new Error("claude exited 1");
+    };
+
+    it("clean: fails on a 2-of-3 invented majority and merges problems", async () => {
+      const claude = seq(
+        vote({ invented: true, color: true, problems: ["rain", "night"] }),
+        vote({ invented: true, color: false, problems: ["rain", "x".repeat(300)] }),
+        vote({ invented: false, color: false, problems: [] }),
+      );
+      const v = await judge("clean", ["/w/a.png"], "/w", claude as any);
+      expect(v.fail).toBe(true);
+      expect(v.flags).toEqual(["invented"]);
+      expect(v.problems).toEqual(["rain", "night", "x".repeat(200)]);
+    });
+
+    it("clean: a single vote is not a majority; color alone does not fail", async () => {
+      const claude = seq(vote({ invented: true, color: true }), vote({ color: true }), vote({}));
+      const v = await judge("clean", ["/w/a.png"], "/w", claude as any);
+      expect(v).toMatchObject({ fail: false, flags: ["color"] });
+    });
+
+    it("final: only scale gates; unparseable and throwing votes count as no flags", async () => {
+      const claude = seq(vote({ seam: true, scale: true }), async () => "no json", vote({ seam: true, scale: true }));
+      const v = await judge("final", ["/w/f.png", "/w/c1.png"], "/w", claude as any);
+      expect(v).toMatchObject({ fail: true, flags: ["seam", "scale"] });
+      const seamOnly = await judge("final", ["/w/f.png"], "/w", seq(vote({ seam: true }), vote({ seam: true }), bad) as any);
+      expect(seamOnly).toMatchObject({ fail: false, flags: ["seam"] });
+    });
+
+    it("all votes failing is skipped, a pass", async () => {
+      const v = await judge("final", ["/w/f.png"], "/w", bad as any);
+      expect(v).toMatchObject({ fail: false, flags: [], skipped: "claude exited 1" });
+    });
+
+    it("asks sonnet with Read in the work dir, naming the files", async () => {
+      const seen: any[] = [];
+      const claude = async (p: string, t: number, _s: undefined, o: any) => (seen.push({ p, t, o }), "{}");
+      await judge("final", ["/w/f.png", "/w/c1.png", "/w/c2.png"], "/w", claude as any);
+      expect(seen).toHaveLength(3);
+      expect(seen[0].o).toEqual({ model: "sonnet", tools: "Read", cwd: "/w" });
+      expect(seen[0].t).toBe(120_000);
+      expect(seen[0].p).toContain("Read ./f.png (full print insert) and ./c1.png ./c2.png (zoom");
+    });
+  });
+
+  it("runClaude keeps haiku and the Figma tools by default", async () => {
+    const calls: any[] = [];
+    const spawn = ((c: string, a: string[], o: any) => {
+      calls.push({ a, o });
+      const ch: any = new EventEmitter();
+      ch.stdout = new EventEmitter();
+      ch.stderr = new EventEmitter();
+      setImmediate(() => {
+        ch.stdout.emit("data", JSON.stringify({ result: "ok" }));
+        ch.emit("close", 0);
+      });
+      return ch;
+    }) as any;
+    await runClaude("p", 1000, spawn);
+    await runClaude("p", 1000, spawn, { model: "sonnet", tools: "Read", cwd: "/w" });
+    expect(calls[0].a.slice(2, 6)).toEqual(["--model", "haiku", "--allowedTools", expect.stringContaining("use_figma")]);
+    expect(calls[0].o.cwd).toBeUndefined();
+    expect(calls[1].a.slice(2, 6)).toEqual(["--model", "sonnet", "--allowedTools", "Read"]);
+    expect(calls[1].o.cwd).toBe("/w");
   });
 });

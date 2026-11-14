@@ -72,7 +72,7 @@ export function findText(pngPath: string, spawn: SpawnFn = nodeSpawn): Promise<s
   });
 }
 
-async function editImage(step: string, inPath: string, outPath: string, instruction: string, spawn: SpawnFn, check: CheckFn) {
+async function editImage(step: string, inPath: string, outPath: string, instruction: string, spawn: SpawnFn, check: CheckFn, avoid: string[] = []) {
   const src = await readFile(inPath);
   const { width, height } = await sharp(src).metadata();
   const { buf, box } = await padTo34(src, width!, height!);
@@ -81,7 +81,7 @@ async function editImage(step: string, inPath: string, outPath: string, instruct
   // agy returns 896x1200 whatever it is given, so a bigger input only slows the call.
   await writeFile(path.join(dir, "in.png"), await sharp(buf).resize(896, 1200, { fit: "fill" }).png().toBuffer());
   const prompt =
-    `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. Generate exactly one image: no retries, variations or extra attempts. If the image generation tool fails, stop and reply with the error: never edit or create the image with code, scripts or any other tool. Instruction: ${instruction}`;
+    `Use your image generation tool to edit the image ./in.png with this instruction, then save the result in this folder as out.png, and reply with the saved path. Do not use any API key. Do not upscale the result yourself. Generate exactly one image: no retries, variations or extra attempts. If the image generation tool fails, stop and reply with the error: never edit or create the image with code, scripts or any other tool. Instruction: ${instruction}${avoid.length ? ` Avoid: ${avoid.join("; ")}.` : ""}`;
   for (let attempt = 1; ; attempt++) {
     const reply = await runAgy(dir, prompt, undefined, spawn);
     const out = await readOutput(dir);
@@ -110,7 +110,7 @@ async function editImage(step: string, inPath: string, outPath: string, instruct
 
 export function agyEngines(spawn: SpawnFn = nodeSpawn, check: CheckFn = findText): Pick<Engines, "clean" | "fill"> {
   return {
-    clean: (i, o) => editImage("clean", i, o, CLEAN_PROMPT, spawn, check),
-    fill: (i, o) => editImage("fill", i, o, FILL_PROMPT, spawn, check),
+    clean: (i, o, avoid) => editImage("clean", i, o, CLEAN_PROMPT, spawn, check, avoid),
+    fill: (i, o, avoid) => editImage("fill", i, o, FILL_PROMPT, spawn, check, avoid),
   };
 }

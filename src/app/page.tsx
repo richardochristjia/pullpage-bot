@@ -261,6 +261,7 @@ export default function Page() {
           {run.steps.map((s) => (
             <li key={s.label}>
               {s.status === "done" ? "done" : s.status === "failed" ? "failed" : "..."} {s.label}
+              {s.status === "done" && s.error && <span style={{ opacity: 0.6 }}> ({s.error})</span>}
             </li>
           ))}
         </ul>

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { CANVAS, cardRect } from "./geometry";
 import { padTo34, toCard, unpadFrom34 } from "./imaging";
 import { displayName, runPipeline, validateRun, type RunInput } from "./pipeline";
-import type { Engines } from "./engines/types";
+import type { Engines, Verdict } from "./engines/types";
 
 const img = (w: number, h: number, c: string) =>
   sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
@@ -19,19 +19,30 @@ async function card(name: string) {
   return { name, type: "image/png", buf: await sharp(raw, { raw: { width: 736, height: 1024, channels: 3 } }).png().toBuffer() };
 }
 
-function fakes() {
-  const calls = { clean: 0, fill: 0, figma: 0, cleanFrame: 0 }
+const pass: Verdict = { fail: false, flags: [], problems: [] };
+
+function fakes(verdicts: Verdict[] = []) {
+  const calls = { clean: 0, fill: 0, figma: 0, cleanFrame: 0 };
+  const avoids: (string[] | undefined)[] = [];
+  const judged: string[] = [];
   const cleanFrameArgs: Buffer[][] = [];
   const engines: Engines = {
-    async clean(i, o) {
+    async clean(i, o, avoid) {
       calls.clean++;
-      await writeFile(o, await readFile(i));
+      avoids.push(avoid);
+      await writeFile(o, avoid ? await img(750, 1050, "red") : await readFile(i)); // red marks the retry
     },
-    async fill(i, o) {
+    async fill(i, o, avoid) {
       calls.fill++;
+      avoids.push(avoid);
       const { width, height } = await sharp(i).metadata();
-      const { box } = await padTo34(await img(width!, height!, "green"), width!, height!);
-      await writeFile(o, await unpadFrom34(await img(896, 1200, "green"), box));
+      const colour = avoid ? "red" : "green"; // red marks the retry
+      const { box } = await padTo34(await img(width!, height!, colour), width!, height!);
+      await writeFile(o, await unpadFrom34(await img(896, 1200, colour), box));
+    },
+    async judge(kind) {
+      judged.push(kind);
+      return verdicts.shift() ?? pass;
     },
     async cleanFrame(i) {
       calls.cleanFrame++;
@@ -50,7 +61,7 @@ function fakes() {
       return { url: `https://figma/${inp.format}`, pngPath, frameId: `1:${calls.figma}` };
     },
   };
-  return { engines, calls, cleanFrameArgs };
+  return { engines, calls, cleanFrameArgs, avoids, judged };
 }
 
 describe("pipeline", () => {
@@ -119,5 +130,57 @@ describe("pipeline", () => {
     const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder"] };
     await expect(runPipeline("r3", input, engines, () => {}, root)).rejects.toThrow("clean figma: boom");
     expect(existsSync(path.join(root, "output"))).toBe(false);
+  });
+
+  const run = async (verdicts: Verdict[], formats: RunInput["formats"] = ["binder"]) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const f = fakes(verdicts);
+    const notes: Record<string, string | undefined> = {};
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats };
+    await runPipeline("r", input, f.engines, (l, s, e) => s === "done" && (notes[l] = e), root);
+    return { ...f, notes, root };
+  };
+  const bad = (problems: string[] = ["rain"], flags = ["invented"]): Verdict => ({ fail: true, flags, problems });
+
+  it("passing checks: one agy call per step, notes say pass", async () => {
+    const { calls, avoids, judged, notes } = await run([]);
+    expect(calls).toMatchObject({ clean: 1, fill: 1 });
+    expect(avoids).toEqual([undefined, undefined]);
+    expect(judged).toEqual(["clean", "final"]);
+    expect(notes["clean card 1 check"]).toBe("pass");
+    expect(notes["binder check"]).toBe("pass");
+  });
+
+  it("failing clean retries once with avoid and the retry is passed on", async () => {
+    const { calls, avoids, notes, cleanFrameArgs } = await run([bad(["rain", "night"]), pass]);
+    expect(calls.clean).toBe(2);
+    expect(avoids[1]).toEqual(["rain", "night"]);
+    expect(notes["clean card 1 check"]).toBe("pass after retry");
+    expect((await sharp(cleanFrameArgs[0][0]).stats()).channels[0].mean).toBeGreaterThan(200); // red
+  });
+
+  it("failing fill retries; fewer flags wins, tie goes to the retry", async () => {
+    const worse = await run([pass, bad(["a"], ["scale", "seam"]), bad(["b"], ["scale"])]);
+    expect(worse.calls.fill).toBe(2);
+    expect(worse.notes["binder check"]).toBe("needs review: scale");
+    const tie = await run([pass, bad(["a"], ["scale"]), bad(["b"], ["scale"])]);
+    const first = await run([pass, bad(["a"], ["scale"]), bad(["b"], ["scale", "smear"])]);
+    // bg handed to figma is the one kept: red when the retry won
+    const mean = async (r: typeof tie) => (await sharp(path.join(r.root, "output", "r", "output_a_binder.png")).extract({ left: 0, top: 0, width: 50, height: 50 }).stats()).channels[0].mean;
+    expect(await mean(tie)).toBeGreaterThan(200);
+    expect(await mean(first)).toBeLessThan(100);
+    expect(first.notes["binder check"]).toBe("needs review: scale");
+  }, 60000);
+
+  it("two failing attempts still finish with a needs review note", async () => {
+    const { notes, root } = await run([bad(), bad(["again"])]);
+    expect(notes["clean card 1 check"]).toBe("needs review: invented");
+    expect(existsSync(path.join(root, "output", "r", "run.json"))).toBe(true);
+  });
+
+  it("a skipped judge finishes the run with a skipped note and no retry", async () => {
+    const { calls, notes } = await run([{ fail: false, flags: [], problems: [], skipped: "claude exited 1" }]);
+    expect(calls.clean).toBe(1);
+    expect(notes["clean card 1 check"]).toBe("skipped: claude exited 1");
   });
 });

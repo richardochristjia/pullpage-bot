@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { composeCanvas, jpegUnder, padTo34, toCard, unpadFrom34 } from "./imaging";
+import { cleanPair, composeCanvas, finalPreviews, jpegUnder, padTo34, toCard, unpadFrom34 } from "./imaging";
 import { CANVAS } from "./geometry";
 
 const solid = (w: number, h: number, c = { r: 200, g: 30, b: 30 }) =>
@@ -64,4 +64,20 @@ describe("imaging", () => {
     expect(png.length).toBeGreaterThan(10 * 1024 * 1024);
     expect((await jpegUnder(png)).length).toBeLessThan(10 * 1024 * 1024);
   }, 60000);
+
+  it("cleanPair is two 750x1050 cards with a 32px gap", async () => {
+    const m = await sharp(await cleanPair(await solid(750, 1050), await solid(896, 1200))).metadata();
+    expect([m.width, m.height]).toEqual([1532, 1050]);
+  });
+
+  it("finalPreviews: full long side <= 1200, crops hold card plus 300px margin, clamped", async () => {
+    const card = await solid(750, 1050);
+    const size = async (b: Buffer) => { const m = await sharp(b).metadata(); return [m.width, m.height]; };
+    const mid = await finalPreviews("binder", await solid(2252, 3152), [{ cell: 4, png: card }, { cell: 0, png: card }]);
+    expect(await size(mid.full)).toEqual([857, 1200]);
+    expect(await size(mid.crops[0])).toEqual([1350, 1650]); // 750+600 x 1050+600
+    expect(await size(mid.crops[1])).toEqual([1050, 1350]); // top-left card: margin clamped at 0
+    const tl = await finalPreviews("toploader", await solid(2702, 3602), [{ cell: 8, png: card }]);
+    expect(await size(tl.crops[0])).toEqual([1125, 1425]); // bottom-right card: clamped at the canvas edge
+  });
 });
