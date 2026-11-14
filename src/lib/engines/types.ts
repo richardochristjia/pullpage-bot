@@ -8,7 +8,7 @@ export type FigmaInput = {
   workDir: string;
 };
 
-export type CleanFrameInput = { name: string; cleaned: Buffer[]; workDir: string }; // cleaned: 750x1050 PNGs
+export type CleanFrameInput = { name: string; cleaned: Buffer[]; keys?: (string | undefined)[]; workDir: string }; // cleaned: 750x1050 PNGs
 
 export type Verdict = { fail: boolean; flags: string[]; problems: string[]; skipped?: string };
 
@@ -19,6 +19,7 @@ export interface Engines {
   fill(inPng: string, outPath: string, avoid?: string[], extra?: FillExtra): Promise<void>;
   judge(kind: "clean" | "final", pngPaths: string[], cwd: string): Promise<Verdict>;
   cleanFrame(input: CleanFrameInput): Promise<{ frameId: string }>;
+  findCleans(keys: string[]): Promise<Record<string, Buffer>>; // key -> 750x1050 PNG; absent keys are misses
   figma(input: FigmaInput): Promise<{ url: string; pngPath: string; frameId: string }>;
 }
 
