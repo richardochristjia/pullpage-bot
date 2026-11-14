@@ -112,9 +112,14 @@ export default function SetupPage() {
 
   return (
     <main className="wrap stack">
-      <div className="page-head">
-        <h1>New run</h1>
-        <p className="meta"><b>{cards.length}</b> of 3 cards</p>
+      <div className="page-head bar">
+        <div className="stack tight">
+          <h1>New run</h1>
+          <p className="meta"><b>{cards.length}</b> of 3 cards</p>
+        </div>
+        <button type="button" className="btn" onClick={() => picker.current?.click()}>Add cards</button>
+        <input ref={picker} type="file" hidden multiple accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
       </div>
       {activeId !== null && (
         <div className="banner" role="status">
@@ -136,11 +141,6 @@ export default function SetupPage() {
             ))}
           </div>
           {!cards.length && <p className="hint">Drop 1 to 3 cards anywhere on the page, or onto a cell.</p>}
-          <div className="row">
-            <button type="button" className="btn" onClick={() => picker.current?.click()}>Add cards</button>
-            <input ref={picker} type="file" hidden multiple accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-          </div>
           {errors.cards && <p className="field-error" role="alert">{errors.cards}</p>}
           <div className="sr-only" aria-live="polite">{live}</div>
         </section>
