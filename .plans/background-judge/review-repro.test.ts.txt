@@ -1,0 +1,92 @@
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import sharp from "sharp";
+import { describe, expect, it } from "vitest";
+import { CANVAS, cardRect } from "./geometry";
+import { padTo34, toCard, unpadFrom34 } from "./imaging";
+import { displayName, runPipeline, validateRun, type RunInput } from "./pipeline";
+import type { Engines, Verdict } from "./engines/types";
+
+const img = (w: number, h: number, c: string) =>
+  sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
+
+async function card(name: string) {
+  // gradient-ish so pixel identity is meaningful
+  const raw = Buffer.alloc(736 * 1024 * 3);
+  for (let i = 0; i < raw.length; i++) raw[i] = (i * 7) % 256;
+  return { name, type: "image/png", buf: await sharp(raw, { raw: { width: 736, height: 1024, channels: 3 } }).png().toBuffer() };
+}
+
+const pass: Verdict = { fail: false, flags: [], problems: [] };
+
+function fakes(verdicts: Verdict[] = []) {
+  const calls = { clean: 0, fill: 0, figma: 0, cleanFrame: 0 };
+  const avoids: (string[] | undefined)[] = [];
+  const judged: string[] = [];
+  const cleanFrameArgs: Buffer[][] = [];
+  const engines: Engines = {
+    async clean(i, o, avoid) {
+      calls.clean++;
+      avoids.push(avoid);
+      await writeFile(o, avoid ? await img(750, 1050, "red") : await readFile(i)); // red marks the retry
+    },
+    async fill(i, o, avoid) {
+      calls.fill++;
+      avoids.push(avoid);
+      const { width, height } = await sharp(i).metadata();
+      const colour = avoid ? "red" : "green"; // red marks the retry
+      const { box } = await padTo34(await img(width!, height!, colour), width!, height!);
+      await writeFile(o, await unpadFrom34(await img(896, 1200, colour), box));
+    },
+    async judge(kind) {
+      judged.push(kind);
+      return verdicts.shift() ?? pass;
+    },
+    async cleanFrame(i) {
+      calls.cleanFrame++;
+      cleanFrameArgs.push(i.cleaned);
+      return { frameId: "9:9" };
+    },
+    async figma(inp) {
+      calls.figma++;
+      const base = await sharp(inp.bg).png().toBuffer();
+      const out = await sharp(base)
+        .composite(inp.originals.map((o) => ({ input: o.png, left: cardRect(inp.format, o.cell).x, top: cardRect(inp.format, o.cell).y })))
+        .png()
+        .toBuffer();
+      const pngPath = path.join(inp.workDir, `fake_${inp.format}.png`);
+      await writeFile(pngPath, out);
+      return { url: `https://figma/${inp.format}`, pngPath, frameId: `1:${calls.figma}` };
+    },
+  };
+  return { engines, calls, cleanFrameArgs, avoids, judged };
+}
+
+describe("review", () => {
+  const run = async (verdicts: Verdict[], formats: RunInput["formats"] = ["binder"]) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const f = fakes(verdicts);
+    const notes: Record<string, string | undefined> = {};
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats };
+    await runPipeline("r", input, f.engines, (l, s, e) => s === "done" && (notes[l] = e), root);
+    return { ...f, notes, root };
+  };
+  const bad = (problems: string[] = ["rain"], flags = ["invented"]): Verdict => ({ fail: true, flags, problems });
+
+
+  it("A skipped retry verdict must not beat a judged first attempt", async () => {
+    const skip: Verdict = { fail: false, flags: [], problems: [], skipped: "claude exited 1" };
+    const r = await run([bad(["rain"], ["invented", "smear"]), skip]);
+    const m = (await sharp(r.cleanFrameArgs[0][0]).stats()).channels[0].mean;
+    console.log("A note", r.notes["clean card 1 check"], "mean", m);
+    expect(m).toBeLessThan(100); // first kept (non-red)
+  });
+  it("B retry passing gate with more non-gate flags", async () => {
+    const r = await run([bad(["rain"], ["invented"]), { fail: false, flags: ["color", "smear"], problems: [] }]);
+    const m = (await sharp(r.cleanFrameArgs[0][0]).stats()).channels[0].mean;
+    console.log("B note", r.notes["clean card 1 check"], "mean", m);
+    expect(m).toBeGreaterThan(200);
+  });
+});
