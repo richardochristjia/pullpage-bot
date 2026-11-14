@@ -36,9 +36,11 @@ export default function Sheet({ format, cards, onFiles, onMove, onNudge, onRemov
     focusIdx.current = null;
   }, [cards]);
 
+  const cancel = () => { drag.current = null; setGhost(null); setOver(null); };
+
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && drag.current) { drag.current = null; setGhost(null); setOver(null); }
+      if (e.key === "Escape" && drag.current) cancel();
     };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
@@ -59,9 +61,7 @@ export default function Sheet({ format, cards, onFiles, onMove, onNudge, onRemov
   };
   const up = (e: React.PointerEvent) => {
     const d = drag.current;
-    drag.current = null;
-    setGhost(null);
-    setOver(null);
+    cancel();
     if (!d) return;
     if (!d.on) return void (e.currentTarget as HTMLElement).focus();
     const t = cellAt(e.clientX, e.clientY);
@@ -96,7 +96,7 @@ export default function Sheet({ format, cards, onFiles, onMove, onNudge, onRemov
                 onPointerDown={(e) => down(e, i)}
                 onPointerMove={move}
                 onPointerUp={up}
-                onPointerCancel={() => { drag.current = null; setGhost(null); setOver(null); }}
+                onPointerCancel={cancel}
                 onKeyDown={(e) => key(e, i)}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
