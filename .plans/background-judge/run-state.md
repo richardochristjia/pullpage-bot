@@ -13,3 +13,12 @@ outcome: must-fix left open (rare all-votes-fail on retry), consider sent to use
 ## Fix, once
 status: skipped
 outcome: falsify ruled nothing to fix
+## Verify
+status: done
+outcome: 81 tests, lint, build pass
+## Deliver
+status: done
+outcome: branch background-judge, not pushed (DELIVERY local)
+## CI status
+status: skipped
+outcome: local delivery, no remote
