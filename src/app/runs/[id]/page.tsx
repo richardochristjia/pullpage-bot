@@ -111,7 +111,7 @@ export default function RunPage() {
   );
 
   const sheet = run.formats.map((f) => {
-    const st = run.steps.filter((s) => s.label.startsWith(`${f} `) && s.status === "done" && s.image && / (canvas|background|check)$/.test(s.label)).pop();
+    const st = run.steps.filter((s) => s.label.startsWith(`${f} `) && s.status === "done" && s.image && phaseOf(s.label) === "Background").pop();
     return st && { f, file: st.image! };
   }).filter(Boolean) as { f: Format; file: string }[];
   const cleaned = run.cards.map((name, k) => {
@@ -173,7 +173,9 @@ function Finish({ id, name, formats, urls = {}, flags, banner, log }: {
       <div className="banner ok" role="status">{banner ?? "Finished"}</div>
       {log}
       <div className="runs finish">
-        {formats.map((f) => (
+        {formats.map((f) => {
+          const fl = flags?.find((x) => x.format === f);
+          return (
           <section key={f} className="run" aria-label={f}>
             <span className="label">{f}</span>
             <div className="run-fmt">
@@ -181,11 +183,12 @@ function Finish({ id, name, formats, urls = {}, flags, banner, log }: {
               <img src={`/api/runs/${id}/image?format=${f}`} alt={`${name}, ${f}`} />
               <div className="stack">
                 {urls[f] && <a className="btn" href={urls[f]} target="_blank" rel="noreferrer">Open in Figma</a>}
-                <CutAndPdf id={id} format={f} cut={!!flags?.find((x) => x.format === f)?.cut} approved={!!flags?.find((x) => x.format === f)?.approved} onDone={() => {}} />
+                <CutAndPdf id={id} format={f} cut={!!fl?.cut} approved={!!fl?.approved} onDone={() => {}} />
               </div>
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
     </main>
   );
