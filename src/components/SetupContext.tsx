@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type Dispatch, type SetStateAction } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { Format } from "../lib/geometry";
 
 export type Card = { file: File; url: string; cell: number };
@@ -25,6 +25,9 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
   const [bgPrompt, setBgPrompt] = useState("");
   const [bgRef, setBgRef] = useState<BgRef | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const urls = useRef<string[]>([]);
+  urls.current = [...cards.map((c) => c.url), ...(bgRef ? [bgRef.url] : [])];
+  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
   const value = { cards, setCards, formats, setFormats, name, setName, bgPrompt, setBgPrompt, bgRef, setBgRef, errors, setErrors };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

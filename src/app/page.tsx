@@ -1,60 +1,92 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import CutAndPdf from "../components/CutAndPdf";
+import Sheet from "../components/Sheet";
+import { useSetup } from "../components/SetupContext";
+import type { Format } from "../lib/geometry";
+import { addAt, moveTo, nudge, removeAt } from "../lib/placement";
 
-type Format = "binder" | "toploader";
-type RunView = {
-  id: string;
-  status: "running" | "done" | "failed";
-  steps: { label: string; status: string; error?: string }[];
-  results: { format: Format; figmaUrl: string }[];
-};
-type Card = { file: File; url: string; cell: number };
+const MODES: { label: string; formats: Format[] }[] = [
+  { label: "Binder", formats: ["binder"] },
+  { label: "Toploader", formats: ["toploader"] },
+  { label: "Both", formats: ["binder", "toploader"] },
+];
 
-type PastRun = { id: string; name: string; createdAt: string; formats: { format: Format; cut: boolean; approved: boolean }[] };
+// Server errors are flat strings; route each to the field it is about.
+const fieldOf = (m: string) =>
+  /Background prompt/.test(m) ? "bgPrompt" : /^Name/.test(m) ? "name" : /^Reference/.test(m) ? "bgRef"
+  : /^Pick 1|cell|png, jpeg|larger than 25MB|share a cell/.test(m) ? "cards" : "form";
 
-const DEFAULT_CELLS = [4, 5, 3];
-
-export default function Page() {
-  const [cards, setCards] = useState<Card[]>([]);
-  const [formats, setFormats] = useState<Format[]>(["binder"]);
-  const [name, setName] = useState("");
-  const [bgPrompt, setBgPrompt] = useState("");
-  const [bgRef, setBgRef] = useState<{ file: File; url: string } | null>(null);
-  const [run, setRun] = useState<RunView | null>(null);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [past, setPast] = useState<PastRun[]>([]);
-  const poll = useRef<ReturnType<typeof setInterval>>(undefined);
-
-  const running = run?.status === "running";
+export default function SetupPage() {
+  const router = useRouter();
+  const { cards, setCards, formats, setFormats, name, setName, bgPrompt, setBgPrompt, bgRef, setBgRef, errors, setErrors } = useSetup();
+  const [busy, setBusy] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [live, setLive] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
   const cells = cards.map((c) => c.cell);
-  const valid = cards.length > 0 && formats.length > 0 && new Set(cells).size === cells.length;
+  const err = (k: string, m?: string) => setErrors((p) => { const n = { ...p }; if (m) n[k] = m; else delete n[k]; return n; });
 
-  function addFiles(files: FileList | File[]) {
-    setCards((prev) => {
-      const next = [...prev];
-      for (const file of Array.from(files)) {
-        if (next.length >= 3 || !file.type.startsWith("image/")) continue;
-        const free = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((i) => !next.some((c) => c.cell === i));
-        const cell = free.includes(DEFAULT_CELLS[next.length]) ? DEFAULT_CELLS[next.length] : free[0];
-        next.push({ file, url: URL.createObjectURL(file), cell });
-      }
-      return next;
-    });
+  function addFiles(files: File[], target?: number) {
+    const msgs: string[] = [];
+    let cs = cells, next = [...cards], extra = 0;
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) { msgs.push(`${file.name}: not an image`); continue; }
+      const placed = addAt(cs, target);
+      if (!placed) { extra++; continue; }
+      cs = placed;
+      next = next.map((c, i) => ({ ...c, cell: cs[i] }));
+      next.push({ file, url: URL.createObjectURL(file), cell: cs[next.length] });
+      target = undefined;
+    }
+    if (extra) msgs.push(`Only 3 cards fit; dropped ${extra} extra`);
+    err("cards", msgs.join(". ") || undefined);
+    if (next.length !== cards.length || next.some((c, i) => cards[i]?.cell !== c.cell)) setCards(next);
+    if (next.length > cards.length) setLive(`${next.length} of 3 cards placed`);
   }
 
-  const toggleFormat = (f: Format) =>
-    setFormats((p) => (p.includes(f) ? p.filter((x) => x !== f) : [...p, f]));
+  const applyCells = (n: number[], msg: string) => {
+    setCards((p) => p.map((c, i) => ({ ...c, cell: n[i] })));
+    setLive(msg);
+  };
+  const remove = (i: number) => {
+    URL.revokeObjectURL(cards[i].url);
+    setCards((p) => p.filter((_, j) => j !== i));
+    err("cards");
+    setLive(`Card ${i + 1} removed`);
+  };
+
+  const addRef = useRef(addFiles);
+  addRef.current = addFiles;
+  useEffect(() => {
+    const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); };
+    const drop = (e: DragEvent) => {
+      if (!e.dataTransfer?.files.length) return;
+      e.preventDefault();
+      if (!(e.target as HTMLElement).closest?.("[data-ref]")) addRef.current(Array.from(e.dataTransfer.files));
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => { window.removeEventListener("dragover", over); window.removeEventListener("drop", drop); };
+  }, []);
 
   const setRef = (file?: File | null) => {
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return err("bgRef", `${file.name}: not an image`);
+    err("bgRef");
     setBgRef((p) => (p && URL.revokeObjectURL(p.url), { file, url: URL.createObjectURL(file) }));
   };
-  const clearRef = () => setBgRef((p) => (p && URL.revokeObjectURL(p.url), null));
+
+  const mode = MODES.find((m) => m.formats.join() === formats.join()) ?? MODES[0];
+  const n = cards.length + formats.length;
+  const reason = !cards.length ? "Add 1 to 3 cards" : !formats.length ? "Pick a format" : "";
 
   async function start() {
-    setErrors([]);
+    setErrors({});
+    setActiveId(null);
+    setBusy(true);
     const form = new FormData();
     cards.forEach((c) => form.append("cards", c.file));
     form.append("cells", JSON.stringify(cells));
@@ -62,164 +94,104 @@ export default function Page() {
     form.append("name", name || cards[0].file.name);
     if (bgPrompt.trim()) form.append("bgPrompt", bgPrompt);
     if (bgRef) form.append("bgRef", bgRef.file);
-    const res = await fetch("/api/runs", { method: "POST", body: form });
-    const body = await res.json();
-    if (!res.ok) return setErrors(body.errors ?? ["Could not start the run."]);
-    setRun({ id: body.id, status: "running", steps: [], results: [] });
+    try {
+      const res = await fetch("/api/runs", { method: "POST", body: form });
+      const body = await res.json();
+      if (res.status === 202) return router.push(`/runs/${body.id}`);
+      if (res.status === 409) setActiveId(body.activeId ?? "");
+      else {
+        const e: Record<string, string> = {};
+        for (const m of (body.errors ?? ["Could not start the run."]) as string[]) { const k = fieldOf(m); e[k] = e[k] ? `${e[k]} ${m}` : m; }
+        setErrors(e);
+      }
+    } catch {
+      setErrors({ form: "Could not reach the server." });
+    }
+    setBusy(false);
   }
 
-  const loadPast = () =>
-    fetch("/api/runs")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setPast)
-      .catch(() => {});
-
-  useEffect(() => {
-    loadPast();
-  }, [run?.status]);
-
-  useEffect(() => {
-    if (!running || !run) return;
-    poll.current = setInterval(async () => {
-      const res = await fetch(`/api/runs/${run.id}`);
-      if (res.ok) setRun(await res.json());
-    }, 2000);
-    return () => clearInterval(poll.current);
-  }, [running, run?.id]);
-
-  const failed = run?.steps.find((s) => s.status === "failed");
-
   return (
-    <main>
-      <h1>pullpage-bot</h1>
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          addFiles(e.dataTransfer.files);
-        }}
-        style={{ border: "2px dashed #666", padding: 24, textAlign: "center" }}
-      >
-        Drop 1 to 3 cards here or{" "}
-        <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(e) => e.target.files && addFiles(e.target.files)} />
+    <main className="wrap stack">
+      <div className="page-head">
+        <h1>New run</h1>
+        <p className="meta"><b>{cards.length}</b> of 3 cards</p>
       </div>
-
-      <div style={{ display: "flex", gap: 16, margin: "16px 0" }}>
-        {cards.map((c, k) => (
-          <div key={c.url}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={c.url} alt={c.file.name} width={120} />
-            <div>
-              <button onClick={() => setCards((p) => p.filter((_, i) => i !== k))}>Remove</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 28px)", gap: 2, marginTop: 6 }}>
-              {Array.from({ length: 9 }, (_, i) => {
-                const taken = cards.some((o, j) => j !== k && o.cell === i);
-                return (
-                  <button
-                    key={i}
-                    disabled={taken}
-                    aria-pressed={c.cell === i}
-                    onClick={() => setCards((p) => p.map((x, j) => (j === k ? { ...x, cell: i } : x)))}
-                    style={{ height: 28, background: c.cell === i ? "#4a8" : undefined }}
-                  >
-                    {c.cell === i ? "x" : ""}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-        {(["binder", "toploader"] as const).map((f) => (
-          <label key={f}>
-            <input type="checkbox" checked={formats.includes(f)} onChange={() => toggleFormat(f)} /> {f}
-          </label>
-        ))}
-        <input placeholder="run name" value={name} onChange={(e) => setName(e.target.value)} />
-        <textarea
-          placeholder="Background prompt (optional)"
-          maxLength={1000}
-          value={bgPrompt}
-          onChange={(e) => setBgPrompt(e.target.value)}
-        />
-        <div
-          tabIndex={0}
-          onPaste={(e) => setRef(Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"))?.getAsFile())}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            setRef(Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/")));
-          }}
-        >
-          {bgRef ? (
-            <>
-              <img src={bgRef.url} alt="background reference" height={60} />{" "}
-              <button type="button" onClick={clearRef}>Remove</button>
-            </>
-          ) : (
-            "Click, then paste an image (Cmd+V) or drop one"
-          )}
+      {activeId !== null && (
+        <div className="banner" role="status">
+          A run is already active.{" "}
+          {activeId ? <Link href={`/runs/${activeId}`}>Open it</Link> : <Link href="/library">See Library</Link>}
         </div>
-        <button disabled={!valid || running} onClick={start}>
-          {failed || run?.status === "done" ? "Run again" : "Run"}
-        </button>
-      </div>
-
-      {errors.map((e) => (
-        <p key={e} style={{ color: "#f66" }}>{e}</p>
-      ))}
-
-      {run && (
-        <ul>
-          {run.steps.map((s) => (
-            <li key={s.label}>
-              {s.status === "done" ? "done" : s.status === "failed" ? "failed" : "..."} {s.label}
-              {s.status === "done" && s.error && <span style={{ opacity: 0.6 }}> ({s.error})</span>}
-            </li>
-          ))}
-        </ul>
       )}
-      {failed && <p style={{ color: "#f66" }}>Failed at {failed.error}</p>}
-
-      {run?.status === "done" &&
-        run.results.map((r) => (
-          <div key={r.format}>
-            <h3>{r.format}</h3>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/runs/${run.id}/image?format=${r.format}`} alt={r.format} style={{ maxWidth: 300 }} />
-            <p>
-              <a href={`/api/runs/${run.id}/image?format=${r.format}`} download>Download</a>{" · "}
-              <a href={r.figmaUrl} target="_blank" rel="noreferrer">Open in Figma</a>{" · "}
-              <CutAndPdf id={run.id} format={r.format} cut={false} approved={false} onDone={loadPast} />
-            </p>
-          </div>
-        ))}
-
-      {past.length > 0 && (
-        <section>
-          <h2>Past runs</h2>
-          {past.map((p) => (
-            <div key={p.id} style={{ marginBottom: 16 }}>
-              <strong>{p.name}</strong> <small>{new Date(p.createdAt).toLocaleString()}</small>
-              <div style={{ display: "flex", gap: 16 }}>
-                {p.formats.map((f) => (
-                  <div key={f.format}>
-                    <a href={`/api/runs/${p.id}/image?format=${f.format}`} target="_blank" rel="noreferrer">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/api/runs/${p.id}/image?format=${f.format}`} alt={f.format} width={100} />
-                    </a>
-                    <div>{f.format}</div>
-                    <CutAndPdf id={p.id} format={f.format} cut={f.cut} approved={f.approved} onDone={loadPast} />
-                  </div>
-                ))}
+      <div className="setup">
+        <section className="stack" aria-label="Sheet">
+          <div className={`sheets${formats.length > 1 ? " two" : ""}`} role="grid" aria-label="3 by 3 sheet">
+            {formats.map((f) => (
+              <div key={f} className="stack">
+                <span className="label">{f}</span>
+                <Sheet format={f} cards={cards} onFiles={addFiles}
+                  onMove={(i, t) => applyCells(moveTo(cells, i, t), `Card ${i + 1} to cell ${t + 1}`)}
+                  onNudge={(i, d) => { const m = nudge(cells, i, d); applyCells(m, `Card ${i + 1} to cell ${m[i] + 1}`); }}
+                  onRemove={remove} />
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          {!cards.length && <p className="hint">Drop 1 to 3 cards anywhere on the page, or onto a cell.</p>}
+          <div className="row">
+            <button type="button" className="btn" onClick={() => picker.current?.click()}>Add cards</button>
+            <input ref={picker} type="file" hidden multiple accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+          </div>
+          {errors.cards && <p className="field-error" role="alert">{errors.cards}</p>}
+          <div className="sr-only" aria-live="polite">{live}</div>
         </section>
-      )}
+
+        <section className="box stack" aria-label="Options">
+          <h2>Options</h2>
+          <div className="field">
+            <span className="label" id="fmt">Format</span>
+            <div className="seg" role="radiogroup" aria-labelledby="fmt">
+              {MODES.map((m) => (
+                <button key={m.label} type="button" role="radio" aria-checked={m === mode} onClick={() => setFormats(m.formats)}>{m.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="name">Run name</label>
+            <input id="name" className="input" value={name} placeholder={cards[0]?.file.name ?? "First card name"} onChange={(e) => setName(e.target.value)} />
+            {errors.name && <p className="field-error">{errors.name}</p>}
+          </div>
+          <div className="field">
+            <label htmlFor="prompt">Extra background prompt</label>
+            <textarea id="prompt" className="input" rows={3} maxLength={1000} value={bgPrompt} onChange={(e) => setBgPrompt(e.target.value)} />
+            {errors.bgPrompt && <p className="field-error">{errors.bgPrompt}</p>}
+          </div>
+          <div className="field">
+            <span className="label" id="ref">Background reference</span>
+            <div className="refbox" data-ref tabIndex={0} aria-labelledby="ref"
+              onPaste={(e) => setRef(Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"))?.getAsFile())}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); setRef(Array.from(e.dataTransfer.files)[0]); }}>
+              {bgRef ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={bgRef.url} alt="Background reference" />
+                  <button type="button" className="btn" onClick={() => setBgRef((p) => (p && URL.revokeObjectURL(p.url), null))}>Remove</button>
+                </>
+              ) : (
+                <span className="hint">Click, then paste an image (Cmd+V), or drop one</span>
+              )}
+            </div>
+            {errors.bgRef && <p className="field-error">{errors.bgRef}</p>}
+          </div>
+          <div className="runbar">
+            {errors.form && <p className="field-error" role="alert">{errors.form}</p>}
+            <button type="button" className="btn btn-primary" disabled={!!reason || busy} onClick={start}>
+              {busy ? "Uploading…" : "Run"}
+            </button>
+            <p className="meta">{reason || `about ${3 * n} min · ${n} agy calls`}</p>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
