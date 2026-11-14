@@ -74,3 +74,6 @@ Entries are added or amended **only with human approval**.
 - (pipeline) A run lists every planned step as pending when it starts, and each step records its start and end time.
 - (api) Intermediate run images are served read-only from .work/<runId>/ for a fixed allow-list of file names.
 - (ui) Past runs are listed at /library and the link cut and export tools sit at /links.
+- (clean) Before cleaning, a run looks up each card by a hash of its uploaded bytes and the clean prompt, first in `.cache/clean/` and then in the `Automation` page's clean layers, and reuses a match without agy or the judges.
+- (clean) Only cleans that pass the judges are cached locally and keyed in their Figma layer name, so a needs-review clean is regenerated on the next run.
+- (clean) A failed Figma clean lookup falls back to cleaning and never fails the run.

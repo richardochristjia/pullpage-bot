@@ -6,8 +6,8 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { CANVAS, cardRect } from "./geometry";
 import { padTo34, toCard, unpadFrom34 } from "./imaging";
-import { displayName, planSteps, runPipeline, validateRun, type RunInput } from "./pipeline";
-import type { Engines, Verdict } from "./engines/types";
+import { cardKey, displayName, planSteps, runPipeline, validateRun, type RunInput } from "./pipeline";
+import { CLEAN_PROMPT, type Engines, type Verdict } from "./engines/types";
 
 const img = (w: number, h: number, c: string) =>
   sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
@@ -26,6 +26,8 @@ function fakes(verdicts: Verdict[] = []) {
   const avoids: (string[] | undefined)[] = [];
   const judged: string[] = [];
   const cleanFrameArgs: Buffer[][] = [];
+  const cleanFrameKeys: (string | undefined)[][] = [];
+  const find = { calls: 0, result: {} as Record<string, Buffer>, throws: false };
   const engines: Engines = {
     async clean(i, o, avoid) {
       calls.clean++;
@@ -47,7 +49,13 @@ function fakes(verdicts: Verdict[] = []) {
     async cleanFrame(i) {
       calls.cleanFrame++;
       cleanFrameArgs.push(i.cleaned);
+      cleanFrameKeys.push(i.keys ?? []);
       return { frameId: "9:9" };
+    },
+    async findCleans() {
+      find.calls++;
+      if (find.throws) throw new Error("lookup down");
+      return find.result;
     },
     async figma(inp) {
       calls.figma++;
@@ -61,7 +69,7 @@ function fakes(verdicts: Verdict[] = []) {
       return { url: `https://figma/${inp.format}`, pngPath, frameId: `1:${calls.figma}` };
     },
   };
-  return { engines, calls, cleanFrameArgs, avoids, judged };
+  return { engines, calls, cleanFrameArgs, cleanFrameKeys, find, avoids, judged };
 }
 
 describe("pipeline", () => {
@@ -244,4 +252,98 @@ describe("pipeline", () => {
     expect(images["binder canvas"]).toBe("binder.canvas.png");
     expect(images["binder check"]).toBe("binder.bg.png");
   }, 60000);
+
+  describe("clean reuse", () => {
+    const cacheFile = (root: string, c: { buf: Buffer }) => path.join(root, ".cache", "clean", `${cardKey(c.buf)}.png`);
+    const go = async (f: ReturnType<typeof fakes>, cards: { name: string; type: string; buf: Buffer }[], root: string) => {
+      const notes: Record<string, string | undefined> = {};
+      const labels: string[] = [];
+      const input: RunInput = { cards, cells: cards.map((_, i) => i), formats: ["binder"] };
+      await runPipeline("rr", input, f.engines, (l, s, e) => {
+        if (s === "running") labels.push(l);
+        if (s === "done") notes[l] = e;
+      }, root);
+      return { notes, labels, input };
+    };
+
+    it("key depends on the prompt", async () => {
+      const c = await card("a.png");
+      expect(cardKey(c.buf)).toMatch(/^[0-9a-f]{16}$/);
+      expect(cardKey(c.buf)).toBe(cardKey(c.buf, CLEAN_PROMPT));
+      expect(cardKey(c.buf, CLEAN_PROMPT + "x")).not.toBe(cardKey(c.buf));
+    });
+
+    it("second run hits the local cache and calls nothing", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const c = await card("a.png");
+      await go(fakes(), [c], root);
+      const f = fakes();
+      const { notes } = await go(f, [c], root);
+      expect(f.calls.clean).toBe(0);
+      expect(f.judged).not.toContain("clean");
+      expect(f.find.calls).toBe(0);
+      expect(notes["clean card 1"]).toBe("reused from cache");
+      expect(notes["clean card 1 check"]).toBe("skipped: reused");
+      expect(f.cleanFrameKeys[0]).toEqual([cardKey(c.buf)]);
+      expect(existsSync(path.join(root, ".work", "rr", "card0.clean.png"))).toBe(true);
+    }, 60000);
+
+    it("local miss, Figma hit: no clean or judge, cache written", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const c = await card("a.png");
+      const f = fakes();
+      f.find.result = { [cardKey(c.buf)]: await img(750, 1050, "blue") };
+      const { notes } = await go(f, [c], root);
+      expect(f.calls.clean).toBe(0);
+      expect(f.judged).not.toContain("clean");
+      expect(notes["clean card 1"]).toBe("reused from Figma");
+      expect(existsSync(cacheFile(root, c))).toBe(true);
+    }, 60000);
+
+    it("both miss, clean passes: cleaned, judged, cached and keyed", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const c = await card("a.png");
+      const f = fakes();
+      await go(f, [c], root);
+      expect(f.calls.clean).toBe(1);
+      expect(f.judged).toContain("clean");
+      expect(existsSync(cacheFile(root, c))).toBe(true);
+      expect(f.cleanFrameKeys[0]).toEqual([cardKey(c.buf)]);
+    }, 60000);
+
+    it("needs review (or unchecked): no cache, no key", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const c = await card("a.png");
+      const bad: Verdict = { fail: true, flags: ["invented"], problems: ["x"] };
+      const f = fakes([bad, bad]);
+      await go(f, [c], root);
+      expect(existsSync(cacheFile(root, c))).toBe(false);
+      expect(f.cleanFrameKeys[0]).toEqual([undefined]);
+      const root2 = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const g = fakes([{ fail: false, flags: [], problems: [], skipped: "no verdict" }]);
+      await go(g, [c], root2);
+      expect(existsSync(cacheFile(root2, c))).toBe(false);
+    }, 60000);
+
+    it("findCleans throwing falls back to cleaning", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const f = fakes();
+      f.find.throws = true;
+      await go(f, [await card("a.png")], root);
+      expect(f.calls.clean).toBe(1);
+    }, 60000);
+
+    it("mixed cards: only the new card is cleaned, labels equal planSteps", async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+      const a = await card("a.png");
+      await go(fakes(), [a], root);
+      const raw = Buffer.alloc(736 * 1024 * 3, 9);
+      const b = { name: "b.png", type: "image/png", buf: await sharp(raw, { raw: { width: 736, height: 1024, channels: 3 } }).png().toBuffer() };
+      const f = fakes();
+      const { labels, input } = await go(f, [a, b], root);
+      expect(f.calls.clean).toBe(1);
+      expect(f.find.calls).toBe(1);
+      expect(new Set(labels)).toEqual(new Set(planSteps(input)));
+    }, 60000);
+  });
 });

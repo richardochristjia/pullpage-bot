@@ -30,7 +30,7 @@ for (const c of ${JSON.stringify(cards)}) {
 return { pageId: page.id, frameId: frame.id, bgId: bg.id, cardIds };`;
 }
 
-export function buildCleanFrameScript(o: { name: string; count: number }) {
+export function buildCleanFrameScript(o: { name: string; count: number; keys?: (string | undefined)[] }) {
   const w = o.count * CARD.w + (o.count - 1) * 64;
   return `let page = figma.root.children.find((p) => p.name === "Automation");
 if (!page) { page = figma.createPage(); page.name = "Automation"; }
@@ -43,11 +43,24 @@ frame.x = right; frame.y = 0;
 frame.fills = [];
 frame.clipsContent = true;
 const cleanIds = [];
+const keys = ${JSON.stringify(Array.from({ length: o.count }, (_, i) => o.keys?.[i] ?? null))};
 for (let i = 0; i < ${o.count}; i++) {
-  const r = figma.createRectangle(); r.name = "clean" + (i + 1); r.resize(${CARD.w}, ${CARD.h});
+  const r = figma.createRectangle(); r.name = "clean" + (i + 1) + (keys[i] ? " #" + keys[i] : ""); r.resize(${CARD.w}, ${CARD.h});
   frame.appendChild(r); r.x = i * ${CARD.w + 64}; r.y = 0; cleanIds.push(r.id);
 }
 return { pageId: page.id, frameId: frame.id, cleanIds };`;
+}
+
+export function buildFindCleansScript(o: { keys: string[] }) {
+  return `const page = figma.root.children.find((p) => p.name === "Automation");
+if (!page) return { found: {} };
+await figma.setCurrentPageAsync(page);
+const found = {};
+for (const key of ${JSON.stringify(o.keys)}) {
+  const hits = page.findAll((n) => n.name.endsWith(" #" + key));
+  if (hits.length) found[key] = hits[hits.length - 1].id;
+}
+return { found };`;
 }
 
 export function extractJson(text: string): any {
@@ -174,6 +187,24 @@ export async function exportNode(deps: FigmaDeps, nodeId: string, w: number, h: 
   return png;
 }
 
+// Never throws for a miss: a key whose export fails is dropped, so that card is cleaned again.
+export async function findCleans(deps: FigmaDeps, keys: string[]): Promise<Record<string, Buffer>> {
+  const reply = await askJson(
+    deps,
+    `Use the Figma MCP tools. 1) Call create_session with fileKey "${deps.fileKey}". 2) Call use_figma with fileKey "${deps.fileKey}" and this code verbatim:\n${buildFindCleansScript({ keys })}\nReply with ONLY JSON: {"found":{"<key>":"<nodeId>"}} exactly as the code returned it.`,
+    2,
+  );
+  const found: Record<string, unknown> = reply.found ?? {};
+  const out: Record<string, Buffer> = {};
+  for (const key of keys) {
+    if (typeof found[key] !== "string") continue;
+    try {
+      out[key] = await exportNode(deps, found[key] as string, CARD.w, CARD.h);
+    } catch {}
+  }
+  return out;
+}
+
 export const exportFrame = (deps: FigmaDeps, frameId: string, format: Format) =>
   exportNode(deps, frameId, CANVAS[format].w, CANVAS[format].h);
 
@@ -297,7 +328,7 @@ async function postFiles(deps: FigmaDeps, uploads: { submitUrl: string }[], file
 export async function publishCleanFrame(input: CleanFrameInput, deps: FigmaDeps) {
   const { fileKey } = deps;
   const count = input.cleaned.length;
-  const script = buildCleanFrameScript({ name: input.name, count });
+  const script = buildCleanFrameScript({ name: input.name, count, keys: input.keys });
   const reply = await askJson(
     deps,
     `Use the Figma MCP tools. 1) Call create_session with fileKey "${fileKey}". 2) Call use_figma with fileKey "${fileKey}" and this code verbatim:\n${script}\n3) Call upload_assets with fileKey "${fileKey}", count ${count}, nodeIds = cleanIds from the result, and currentPageId = pageId from the result. Reply with ONLY JSON: {"frameId":"...","uploads":[{"nodeId":"...","submitUrl":"..."}]} in the same order as nodeIds.`,

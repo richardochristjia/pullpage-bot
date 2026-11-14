@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import { cp, mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { FORMATS, type Format } from "./geometry";
 import { cleanPair, composeCanvas, finalPreviews, toCard } from "./imaging";
 import sharp from "sharp";
-import type { Engines, FillExtra, Verdict } from "./engines/types";
+import { CLEAN_PROMPT, type Engines, type FillExtra, type Verdict } from "./engines/types";
 
 export type RunInput = {
   cards: { name: string; type: string; buf: Buffer }[];
@@ -23,6 +24,10 @@ const MAX_BYTES = 25 * 1024 * 1024;
 
 export const slugify = (s: string) =>
   s.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+
+// Identifies a card's clean: the uploaded bytes plus the prompt, so a new prompt invalidates old cleans.
+export const cardKey = (buf: Buffer, prompt = CLEAN_PROMPT) =>
+  createHash("sha256").update(buf).update(prompt).digest("hex").slice(0, 16);
 
 export const runName = (i: RunInput) => slugify(i.name || i.cards[0]?.name || "");
 
@@ -91,22 +96,23 @@ export async function runPipeline(
     onStep(label, "running");
     const note = (v: Verdict, retried: boolean) =>
       v.skipped ? `skipped: ${v.skipped}` : v.fail ? `needs review: ${v.flags.join(", ")}` : retried ? "pass after retry" : "pass";
+    const ok = (v: Verdict) => !v.fail && !v.skipped; // an unchecked result is not a pass
     const v1 = await judgeIt(first, "");
     if (!v1.fail) {
       onStep(label, "done", note(v1, false), files[0]);
-      return first;
+      return { buf: first, passed: ok(v1) };
     }
     let second: Buffer;
     try {
       second = await retry(v1.problems);
     } catch (e) {
       onStep(label, "done", `${note(v1, false)} (retry failed: ${(e as Error).message})`, files[0]);
-      return first;
+      return { buf: first, passed: false };
     }
     const v2 = await judgeIt(second, "2");
     const keepRetry = v2.flags.length <= v1.flags.length;
     onStep(label, "done", note(keepRetry ? v2 : v1, true), files[keepRetry ? 1 : 0]);
-    return keepRetry ? second : first;
+    return { buf: keepRetry ? second : first, passed: ok(keepRetry ? v2 : v1) };
   };
 
   const originals = await step("resize", () => Promise.all(input.cards.map((c) => toCard(c.buf))));
@@ -116,7 +122,40 @@ export async function runPipeline(
   if (bgRef && ref) await step("reference", async () => writeFile(ref, await sharp(bgRef.buf).png().toBuffer()));
   const extra: FillExtra | undefined = input.bgRef || input.bgPrompt ? { prompt: input.bgPrompt || undefined, ref } : undefined;
   const cleaned: Buffer[] = [];
+  const keys = input.cards.map((c) => cardKey(c.buf));
+  const keyed: (string | undefined)[] = []; // keys of cleans that passed or were reused
+  const cacheDir = path.join(root, ".cache", "clean");
+  const cachePut = (k: number, buf: Buffer) =>
+    mkdir(cacheDir, { recursive: true }).then(() => writeFile(path.join(cacheDir, `${keys[k]}.png`), buf)).catch(() => {});
+  const reused = new Map<number, { buf: Buffer; from: string }>();
+  for (const [k, key] of keys.entries()) {
+    const buf = await readFile(path.join(cacheDir, `${key}.png`)).catch(() => undefined);
+    if (buf) reused.set(k, { buf, from: "cache" });
+  }
+  const missing = [...new Set(keys.filter((_, k) => !reused.has(k)))];
+  if (missing.length) {
+    // A failed lookup is a miss, never a run failure.
+    const found = await engines.findCleans(missing).catch((): Record<string, Buffer> => ({}));
+    for (const [k, key] of keys.entries()) {
+      if (reused.has(k) || !found[key]) continue;
+      reused.set(k, { buf: found[key], from: "Figma" });
+      await cachePut(k, found[key]);
+    }
+  }
   for (const [k, orig] of originals.entries()) {
+    const hit = reused.get(k);
+    if (hit) {
+      const label = `clean card ${k + 1}`;
+      const img = `card${k}.clean.png`;
+      onStep(label, "running");
+      await writeFile(path.join(work, img), hit.buf);
+      onStep(label, "done", `reused from ${hit.from}`, img);
+      onStep(`${label} check`, "running");
+      onStep(`${label} check`, "done", "skipped: reused");
+      cleaned.push(hit.buf);
+      keyed.push(keys[k]);
+      continue;
+    }
     const inp = path.join(work, `card${k}.png`);
     const out = path.join(work, `card${k}.clean.png`);
     const first = await step(`clean card ${k + 1}`, async () => {
@@ -124,8 +163,7 @@ export async function runPipeline(
       await engines.clean(inp, out);
       return readFile(out);
     }, `card${k}.clean.png`);
-    cleaned.push(
-      await check(
+    const res = await check(
         `clean card ${k + 1} check`,
         first,
         async (buf, tag) => {
@@ -139,8 +177,10 @@ export async function runPipeline(
           return readFile(out2);
         },
         [`card${k}.clean.png`, `card${k}.clean2.png`],
-      ),
-    );
+      );
+    cleaned.push(res.buf);
+    keyed.push(res.passed ? keys[k] : undefined);
+    if (res.passed) await cachePut(k, res.buf);
   }
 
   const results: { format: Format; figmaUrl: string; pngPath: string; frameId: string }[] = [];
@@ -157,7 +197,7 @@ export async function runPipeline(
       await engines.fill(inp, out, undefined, extra);
       return readFile(out);
     }, `${format}.bg.png`);
-    const bg = await check(
+    const { buf: bg } = await check(
       `${format} check`,
       firstBg,
       async (buf, tag) => {
@@ -185,7 +225,7 @@ export async function runPipeline(
     results.push({ format, figmaUrl: r.url, pngPath: r.pngPath, frameId: r.frameId });
   }
 
-  const clean = await step("clean figma", () => engines.cleanFrame({ name, cleaned, workDir: work }));
+  const clean = await step("clean figma", () => engines.cleanFrame({ name, cleaned, keys: keyed, workDir: work }));
 
   // Only a fully successful run writes to output/.
   await step("save", async () => {

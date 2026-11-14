@@ -12,6 +12,7 @@ const engines: Engines = {
   fill: async (i, o) => writeFile(o, await readFile(i)),
   judge: async () => ({ fail: false, flags: [], problems: [] }),
   cleanFrame: async () => ({ frameId: "9:9" }),
+  findCleans: async () => ({}),
   figma: async (inp) => {
     const pngPath = path.join(inp.workDir, "fake.png");
     await writeFile(pngPath, inp.bg);

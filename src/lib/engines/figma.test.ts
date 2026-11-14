@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { cardRect } from "../geometry";
 import { cutLayout } from "../cut";
-import { buildCleanFrameScript, buildCutScript, buildLinkCutScript, cutLinkInFigma, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, judge, runClaude, publishCleanFrame, publishToFigma } from "./figma";
+import { buildCleanFrameScript, buildCutScript, buildFindCleansScript, findCleans, buildLinkCutScript, cutLinkInFigma, buildFrameScript, cutToFigma, exportFrame, exportNode, extractJson, judge, runClaude, publishCleanFrame, publishToFigma } from "./figma";
 
 describe("figma", () => {
   it("script has size, page, rects, background before cards", () => {
@@ -126,6 +126,26 @@ describe("figma", () => {
     expect(s).toContain('"Automation"');
     expect(s).toContain("resize(1564, 1050)");
     expect(s).toContain("i < 2");
+  });
+
+  it("clean frame script names keyed layers clean<N> #<key>, unkeyed clean<N>", () => {
+    const s = buildCleanFrameScript({ name: "g", count: 2, keys: ["abc", undefined] });
+    expect(s).toContain('const keys = ["abc",null]');
+    expect(s).toContain('"clean" + (i + 1) + (keys[i] ? " #" + keys[i] : "")');
+    expect(buildCleanFrameScript({ name: "g", count: 1 })).toContain("const keys = [null]");
+  });
+
+  it("find script picks the last match per key; findCleans drops failed exports", async () => {
+    const s = buildFindCleansScript({ keys: ["k1", "k2"] });
+    expect(s).toContain('["k1","k2"]');
+    expect(s).toContain("hits[hits.length - 1]");
+    const png = await sharp({ create: { width: 750, height: 1050, channels: 3, background: "red" } }).png().toBuffer();
+    const claude = async (p: string) =>
+      p.includes("use_figma") ? '{"found":{"k1":"1:1","k2":"1:2"}}' : p.includes('"1:1"') ? '{"exportUrl":"ok"}' : '{"exportUrl":"bad"}';
+    const fetchFake = (async (u: string) =>
+      u === "ok" ? { ok: true, arrayBuffer: async () => png } : { ok: false, status: 500 }) as unknown as typeof fetch;
+    const out = await findCleans({ claude, fetch: fetchFake, fileKey: "K" }, ["k1", "k2", "k3"]);
+    expect(Object.keys(out)).toEqual(["k1"]);
   });
 
   it("publishCleanFrame uploads each PNG and rejects a wrong upload count", async () => {
