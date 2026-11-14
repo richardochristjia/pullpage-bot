@@ -53,3 +53,7 @@ The background fill step (one agy call per format that fills the white space aro
 - `src/lib/engines/agy.test.ts`: fill without extra (prompt unchanged, no ref.png); fill with `{prompt, ref}` (ref.png exists in `<out>.agy/`, prompt order); clean ignores extra.
 - `src/lib/pipeline.test.ts`: fake `fill` records its 4th arg; both formats get `{prompt, ref}` with `ref` pointing at an existing file; failing-judge retry gets the same extra; `validateRun` errors for bad type, >25MB, >1000-char prompt.
 - Run: `cd pullpage-bot && npm test && npm run build`.
+
+## Divergence notes
+- Branch base: `bg-reference-prompt` was cut from `background-judge`, not `main`, because `main` holds only the init commit and the app code lives on the unmerged feature-branch stack.
+- Fix round (falsify finding 1): the reference is converted in its own "reference" step right after "resize", before any clean call, instead of after the clean loop. Prompt-only runs have no such step.

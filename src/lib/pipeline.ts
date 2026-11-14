@@ -108,6 +108,11 @@ export async function runPipeline(
   };
 
   const originals = await step("resize", () => Promise.all(input.cards.map((c) => toCard(c.buf))));
+  // Convert the reference before any agy call so a corrupt one fails fast as its own step.
+  const bgRef = input.bgRef;
+  const ref = bgRef ? path.join(work, "bg-ref.png") : undefined;
+  if (bgRef && ref) await step("reference", async () => writeFile(ref, await sharp(bgRef.buf).png().toBuffer()));
+  const extra: FillExtra | undefined = input.bgRef || input.bgPrompt ? { prompt: input.bgPrompt || undefined, ref } : undefined;
   const cleaned: Buffer[] = [];
   for (const [k, orig] of originals.entries()) {
     const inp = path.join(work, `card${k}.png`);
@@ -133,16 +138,6 @@ export async function runPipeline(
         },
       ),
     );
-  }
-
-  let extra: FillExtra | undefined;
-  if (input.bgRef || input.bgPrompt) {
-    let ref: string | undefined;
-    if (input.bgRef) {
-      ref = path.join(work, "bg-ref.png");
-      await writeFile(ref, await sharp(input.bgRef.buf).png().toBuffer());
-    }
-    extra = { prompt: input.bgPrompt || undefined, ref };
   }
 
   const results: { format: Format; figmaUrl: string; pngPath: string; frameId: string }[] = [];
