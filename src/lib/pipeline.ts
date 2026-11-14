@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, writeFile, readFile } from "node:fs/promises";
+import { cp, mkdir, writeFile, readFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { FORMATS, type Format } from "./geometry";
 import { cleanPair, composeCanvas, finalPreviews, toCard } from "./imaging";
@@ -126,7 +126,14 @@ export async function runPipeline(
   const keyed: (string | undefined)[] = []; // keys of cleans that passed or were reused
   const cacheDir = path.join(root, ".cache", "clean");
   const cachePut = (k: number, buf: Buffer) =>
-    mkdir(cacheDir, { recursive: true }).then(() => writeFile(path.join(cacheDir, `${keys[k]}.png`), buf)).catch(() => {});
+    // tmp + rename so a crash mid-write never leaves a half PNG under the key
+    mkdir(cacheDir, { recursive: true })
+      .then(async () => {
+        const tmp = path.join(cacheDir, `${keys[k]}.${process.pid}.tmp`);
+        await writeFile(tmp, buf);
+        await rename(tmp, path.join(cacheDir, `${keys[k]}.png`));
+      })
+      .catch(() => {});
   const reused = new Map<number, { buf: Buffer; from: string }>();
   for (const [k, key] of keys.entries()) {
     const buf = await readFile(path.join(cacheDir, `${key}.png`)).catch(() => undefined);
