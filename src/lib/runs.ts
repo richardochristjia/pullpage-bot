@@ -57,10 +57,8 @@ export function startRun(input: RunInput, engines: Engines, root?: string) {
     s.status = status;
     s.error = error;
     if (image) s.image = image;
-    if (status === "running") {
-      s.startedAt = Date.now();
-      s.endedAt = undefined;
-    } else if (status === "done" || status === "failed") s.endedAt = Date.now();
+    if (status === "running") s.startedAt = Date.now();
+    else if (status === "done" || status === "failed") s.endedAt = Date.now();
   };
   runPipeline(run.id, input, engines, onStep, root)
     .then((r) => {
@@ -70,6 +68,9 @@ export function startRun(input: RunInput, engines: Engines, root?: string) {
     .catch((e) => {
       run.status = "failed";
       run.error = (e as Error).message;
+      // check() has no catch, so a throw there would leave its row running.
+      for (const s of run.steps)
+        if (s.status === "running") Object.assign(s, { status: "failed", error: run.error, endedAt: Date.now() });
     })
     .finally(() => (store.active = undefined));
   return run.id;
