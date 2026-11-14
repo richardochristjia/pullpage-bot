@@ -121,6 +121,24 @@ describe("agy", () => {
     expect(calls[1].args[1]).toContain(`${CLEAN_PROMPT} Avoid: rain on the left; night sky.`);
   });
 
+  it("fill without extra is unchanged; with extra writes ref.png and orders the prompt; clean ignores extra", async () => {
+    const { inp, outp, spawn, calls, scripted } = await setup();
+    const { check } = scripted([], [], [], []);
+    const ref = path.join(path.dirname(inp), "myref.jpg");
+    await writeFile(ref, await sharp({ create: { width: 20, height: 20, channels: 3, background: "purple" } }).jpeg().toBuffer());
+    await agyEngines(spawn, check).fill(inp, outp);
+    expect(calls[0].args[1]).toContain(`Instruction: ${FILL_PROMPT}`);
+    expect(calls[0].args[1]).not.toContain("ref.png");
+    expect(await exists(`${outp}.agy/ref.png`)).toBe(false);
+    await agyEngines(spawn, check).fill(inp, outp, ["x"], { prompt: "stars", ref });
+    const p = calls[1].args[1];
+    const at = [FILL_PROMPT, "./ref.png", "Additional instruction from the user: stars", "Avoid: x."].map((t) => p.indexOf(t));
+    expect(at.every((n) => n >= 0) && [...at].sort((a, b) => a - b).join() === at.join()).toBe(true);
+    expect(await exists(`${outp}.agy/ref.png`)).toBe(true);
+    await (agyEngines(spawn, check).clean as any)(inp, outp, undefined, { prompt: "stars", ref });
+    expect(calls[2].args[1]).not.toContain("stars");
+  });
+
   it("text then clean: two agy calls, file written", async () => {
     const { inp, outp, spawn, calls, scripted } = await setup();
     const { check } = scripted(["Espeon"], []);

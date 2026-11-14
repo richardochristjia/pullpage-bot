@@ -12,9 +12,11 @@ export type CleanFrameInput = { name: string; cleaned: Buffer[]; workDir: string
 
 export type Verdict = { fail: boolean; flags: string[]; problems: string[]; skipped?: string };
 
+export type FillExtra = { prompt?: string; ref?: string }; // ref is a file path
+
 export interface Engines {
   clean(inPng: string, outPath: string, avoid?: string[]): Promise<void>;
-  fill(inPng: string, outPath: string, avoid?: string[]): Promise<void>;
+  fill(inPng: string, outPath: string, avoid?: string[], extra?: FillExtra): Promise<void>;
   judge(kind: "clean" | "final", pngPaths: string[], cwd: string): Promise<Verdict>;
   cleanFrame(input: CleanFrameInput): Promise<{ frameId: string }>;
   figma(input: FigmaInput): Promise<{ url: string; pngPath: string; frameId: string }>;

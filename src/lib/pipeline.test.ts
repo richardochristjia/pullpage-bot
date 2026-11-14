@@ -81,6 +81,31 @@ describe("pipeline", () => {
     expect(validateRun(ok, "")).not.toEqual([]);
   });
 
+  it("validateRun checks the background prompt and reference", async () => {
+    const c = await card("a.png");
+    const ok: RunInput = { cards: [c], cells: [4], formats: ["binder"] };
+    const ref = { name: "r.png", type: "image/png", buf: Buffer.from("x") };
+    expect(validateRun({ ...ok, bgPrompt: "x".repeat(1000), bgRef: ref }, "K")).toEqual([]);
+    expect(validateRun({ ...ok, bgPrompt: "x".repeat(1001) }, "K")).not.toEqual([]);
+    expect(validateRun({ ...ok, bgRef: { ...ref, type: "image/gif" } }, "K")).not.toEqual([]);
+    expect(validateRun({ ...ok, bgRef: { ...ref, buf: Buffer.alloc(25 * 1024 * 1024 + 1) } }, "K")).not.toEqual([]);
+  });
+
+  it("the same extra reaches both formats and the fill retry; clean gets none", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
+    const f = fakes([pass, bad(["a"], ["scale"]), pass, pass]);
+    const extras: unknown[] = [];
+    const fill = f.engines.fill;
+    f.engines.fill = (i, o, avoid, extra) => (extras.push(extra), fill(i, o, avoid, extra));
+    const bgRef = { name: "r.png", type: "image/png", buf: await img(10, 10, "purple") };
+    const input: RunInput = { cards: [await card("a.png")], cells: [4], formats: ["binder", "toploader"], bgPrompt: "stars", bgRef };
+    await runPipeline("rx", input, f.engines, () => {}, root);
+    const ref = path.join(root, ".work", "rx", "bg-ref.png");
+    expect(existsSync(ref)).toBe(true);
+    expect(extras).toHaveLength(3);
+    for (const e of extras) expect(e).toEqual({ prompt: "stars", ref });
+  }, 60000);
+
   it("both formats, 2 cards: clean x2, fill x2, figma x2; canvas size and card pixels exact", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pp-"));
     const { engines, calls, cleanFrameArgs } = fakes();

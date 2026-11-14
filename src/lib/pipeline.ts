@@ -2,7 +2,8 @@ import { cp, mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { FORMATS, type Format } from "./geometry";
 import { cleanPair, composeCanvas, finalPreviews, toCard } from "./imaging";
-import type { Engines, Verdict } from "./engines/types";
+import sharp from "sharp";
+import type { Engines, FillExtra, Verdict } from "./engines/types";
 
 export type RunInput = {
   cards: { name: string; type: string; buf: Buffer }[];
@@ -10,6 +11,8 @@ export type RunInput = {
   formats: Format[];
   name?: string;
   fileKey?: string;
+  bgPrompt?: string;
+  bgRef?: { name: string; type: string; buf: Buffer };
 };
 export type StepStatus = "pending" | "running" | "done" | "failed";
 export type OnStep = (label: string, status: StepStatus, error?: string) => void; // error doubles as a note on done steps
@@ -43,6 +46,11 @@ export function validateRun(i: RunInput, fileKey = process.env.FIGMA_FILE_KEY): 
   if (!i.formats.length || new Set(i.formats).size !== i.formats.length || !i.formats.every((f) => FORMATS.includes(f))) {
     e.push("Pick binder, toploader or both.");
   }
+  if (i.bgRef) {
+    if (!TYPES.includes(i.bgRef.type)) e.push("Reference image must be png, jpeg or webp.");
+    if (i.bgRef.buf.length > MAX_BYTES) e.push("Reference image is larger than 25MB.");
+  }
+  if (i.bgPrompt && i.bgPrompt.length > 1000) e.push("Background prompt is longer than 1000 characters.");
   if (!runName(i)) e.push("Name must be letters, digits, _ or -.");
   if (!fileKey) e.push("FIGMA_FILE_KEY is not set.");
   return e;
@@ -127,6 +135,16 @@ export async function runPipeline(
     );
   }
 
+  let extra: FillExtra | undefined;
+  if (input.bgRef || input.bgPrompt) {
+    let ref: string | undefined;
+    if (input.bgRef) {
+      ref = path.join(work, "bg-ref.png");
+      await writeFile(ref, await sharp(input.bgRef.buf).png().toBuffer());
+    }
+    extra = { prompt: input.bgPrompt || undefined, ref };
+  }
+
   const results: { format: Format; figmaUrl: string; pngPath: string; frameId: string }[] = [];
   for (const format of input.formats) {
     const canvas = await step(`${format} canvas`, () =>
@@ -136,7 +154,7 @@ export async function runPipeline(
     const firstBg = await step(`${format} background`, async () => {
       await writeFile(inp, canvas);
       const out = path.join(work, `${format}.bg.png`);
-      await engines.fill(inp, out);
+      await engines.fill(inp, out, undefined, extra);
       return readFile(out);
     });
     const bg = await check(
@@ -150,7 +168,7 @@ export async function runPipeline(
       },
       async (avoid) => {
         const out2 = path.join(work, `${format}.bg2.png`);
-        await engines.fill(inp, out2, avoid);
+        await engines.fill(inp, out2, avoid, extra);
         return readFile(out2);
       },
     );
