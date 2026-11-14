@@ -19,12 +19,17 @@ export async function POST(req: Request) {
         return { name: f.name, type: f.type, buf: Buffer.from(await f.arrayBuffer()) };
       }),
     );
+    const ref = form.get("bgRef");
+    if (typeof ref === "string") throw new Error("bgRef must be a file");
+    const bgPrompt = String(form.get("bgPrompt") ?? "").trim();
     input = {
       cards,
       cells: JSON.parse(String(form.get("cells") ?? "[]")),
       formats: JSON.parse(String(form.get("formats") ?? "[]")),
       name: String(form.get("name") ?? ""),
       fileKey: process.env.FIGMA_FILE_KEY,
+      bgPrompt: bgPrompt || undefined,
+      bgRef: ref ? { name: ref.name, type: ref.type, buf: Buffer.from(await ref.arrayBuffer()) } : undefined,
     };
   } catch {
     return NextResponse.json({ errors: ["Bad request."] }, { status: 400 });

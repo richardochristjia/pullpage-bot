@@ -1,0 +1,1 @@
+- agy may ignore ref.png or ignore the second input image (src/lib/engines/agy.ts). Check: run 1 toploader card with a reference and prompt (manual checks).

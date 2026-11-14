@@ -138,6 +138,8 @@ export default function Page() {
   const [cards, setCards] = useState<Card[]>([]);
   const [formats, setFormats] = useState<Format[]>(["binder"]);
   const [name, setName] = useState("");
+  const [bgPrompt, setBgPrompt] = useState("");
+  const [bgRef, setBgRef] = useState<{ file: File; url: string } | null>(null);
   const [run, setRun] = useState<RunView | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [past, setPast] = useState<PastRun[]>([]);
@@ -163,6 +165,12 @@ export default function Page() {
   const toggleFormat = (f: Format) =>
     setFormats((p) => (p.includes(f) ? p.filter((x) => x !== f) : [...p, f]));
 
+  const setRef = (file?: File | null) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    setBgRef((p) => (p && URL.revokeObjectURL(p.url), { file, url: URL.createObjectURL(file) }));
+  };
+  const clearRef = () => setBgRef((p) => (p && URL.revokeObjectURL(p.url), null));
+
   async function start() {
     setErrors([]);
     const form = new FormData();
@@ -170,6 +178,8 @@ export default function Page() {
     form.append("cells", JSON.stringify(cells));
     form.append("formats", JSON.stringify(formats));
     form.append("name", name || cards[0].file.name);
+    if (bgPrompt.trim()) form.append("bgPrompt", bgPrompt);
+    if (bgRef) form.append("bgRef", bgRef.file);
     const res = await fetch("/api/runs", { method: "POST", body: form });
     const body = await res.json();
     if (!res.ok) return setErrors(body.errors ?? ["Could not start the run."]);
@@ -247,6 +257,30 @@ export default function Page() {
           </label>
         ))}
         <input placeholder="run name" value={name} onChange={(e) => setName(e.target.value)} />
+        <textarea
+          placeholder="Background prompt (optional)"
+          maxLength={1000}
+          value={bgPrompt}
+          onChange={(e) => setBgPrompt(e.target.value)}
+        />
+        <div
+          tabIndex={0}
+          onPaste={(e) => setRef(Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"))?.getAsFile())}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            setRef(Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/")));
+          }}
+        >
+          {bgRef ? (
+            <>
+              <img src={bgRef.url} alt="background reference" height={60} />{" "}
+              <button type="button" onClick={clearRef}>Remove</button>
+            </>
+          ) : (
+            "Click, then paste an image (Cmd+V) or drop one"
+          )}
+        </div>
         <button disabled={!valid || running} onClick={start}>
           {failed || run?.status === "done" ? "Run again" : "Run"}
         </button>
